@@ -12,7 +12,9 @@ export class TaskHistory {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Task)
+  @ManyToOne(() => Task, {
+    onDelete: 'CASCADE',
+  })
   task!: Task;
 
   @Column()

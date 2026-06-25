@@ -2,9 +2,30 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TasksService } from './tasks.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Task } from './entities/tasks.entity';
+import { User } from 'src/users/entities/users.entity';
+import { Tag } from 'src/tags/entities/tags.entity';
+import { TaskHistory } from 'src/task-history/entities/task-history.entity';
+import { TaskPriority } from 'src/enums/task-priority.enum';
 
 describe('TasksService', () => {
   let service: TasksService;
+  const tasksRepository = {
+    create: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+    remove: jest.fn(),
+  };
+  const usersRepository = {
+    findOne: jest.fn(),
+  };
+  const tagsRepository = {
+    findBy: jest.fn(),
+  };
+  const historyRepository = {
+    create: jest.fn(),
+    save: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -12,15 +33,75 @@ describe('TasksService', () => {
         TasksService,
         {
           provide: getRepositoryToken(Task),
-          useValue: {},
+          useValue: tasksRepository,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: usersRepository,
+        },
+        {
+          provide: getRepositoryToken(Tag),
+          useValue: tagsRepository,
+        },
+        {
+          provide: getRepositoryToken(TaskHistory),
+          useValue: historyRepository,
         },
       ],
     }).compile();
 
     service = module.get<TasksService>(TasksService);
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('should create a task with responsible and tags', async () => {
+    const responsible = {
+      id: 1,
+    };
+    const tags = [{ id: 1 }];
+    const task = {
+      title: 'Implementar Kanban',
+    };
+
+    usersRepository.findOne.mockResolvedValue(responsible);
+    tagsRepository.findBy.mockResolvedValue(tags);
+    tasksRepository.create.mockReturnValue(task);
+    tasksRepository.save.mockResolvedValue(task);
+
+    await expect(
+      service.create({
+        title: 'Implementar Kanban',
+        priority: TaskPriority.MEDIUM,
+        responsibleId: 1,
+        tagIds: [1],
+      }),
+    ).resolves.toBe(task);
+
+    expect(tasksRepository.create).toHaveBeenCalledWith({
+      title: 'Implementar Kanban',
+      description: undefined,
+      priority: TaskPriority.MEDIUM,
+      dueDate: undefined,
+      responsible,
+      tags,
+    });
+  });
+
+  it('should list tasks with relations', async () => {
+    await service.findAll();
+
+    expect(tasksRepository.find).toHaveBeenCalledWith({
+      relations: {
+        responsible: true,
+        tags: true,
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
   });
 });
