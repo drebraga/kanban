@@ -16,6 +16,12 @@ export class UsersService {
     });
   }
 
+  findById(id: number) {
+    return this.repository.findOne({
+      where: { id },
+    });
+  }
+
   create(user: Partial<User>) {
     return this.repository.save(user);
   }

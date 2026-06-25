@@ -4,6 +4,11 @@ import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
+  const authService = {
+    register: jest.fn(),
+    login: jest.fn(),
+    me: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -11,10 +16,7 @@ describe('AuthController', () => {
       providers: [
         {
           provide: AuthService,
-          useValue: {
-            register: jest.fn(),
-            login: jest.fn(),
-          },
+          useValue: authService,
         },
       ],
     }).compile();
@@ -24,5 +26,16 @@ describe('AuthController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('should load the authenticated user profile', async () => {
+    await controller.me({
+      user: {
+        sub: 1,
+        email: 'andre@example.com',
+      },
+    } as never);
+
+    expect(authService.me).toHaveBeenCalledWith(1);
   });
 });
