@@ -65,6 +65,21 @@ export class TasksService {
     return task;
   }
 
+  async findHistory(id: number) {
+    await this.findOne(id);
+
+    return this.historyRepository.find({
+      where: {
+        task: {
+          id,
+        },
+      },
+      order: {
+        createdAt: 'ASC',
+      },
+    });
+  }
+
   async update(id: number, dto: UpdateTaskDto) {
     const task = await this.findOne(id);
     const previousStatus = task.status;

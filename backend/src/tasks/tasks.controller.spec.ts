@@ -8,6 +8,7 @@ describe('TasksController', () => {
     create: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
+    findHistory: jest.fn(),
     update: jest.fn(),
     remove: jest.fn(),
   };
@@ -51,5 +52,11 @@ describe('TasksController', () => {
     await controller.update(1, dto);
 
     expect(tasksService.update).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('should list a task history', async () => {
+    await controller.findHistory(1);
+
+    expect(tasksService.findHistory).toHaveBeenCalledWith(1);
   });
 });

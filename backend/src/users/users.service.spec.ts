@@ -6,6 +6,7 @@ import { User } from './entities/users.entity';
 describe('UsersService', () => {
   let service: UsersService;
   const repository = {
+    find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
   };
@@ -35,5 +36,26 @@ describe('UsersService', () => {
     expect(repository.findOne).toHaveBeenCalledWith({
       where: { id: 1 },
     });
+  });
+
+  it('should list users without passwords', async () => {
+    repository.find.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Andre',
+        email: 'andre@example.com',
+        password: 'hashed-password',
+        createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      },
+    ]);
+
+    await expect(service.findAll()).resolves.toEqual([
+      {
+        id: 1,
+        name: 'Andre',
+        email: 'andre@example.com',
+        createdAt: new Date('2026-06-25T00:00:00.000Z'),
+      },
+    ]);
   });
 });

@@ -22,6 +22,21 @@ export class UsersService {
     });
   }
 
+  async findAll() {
+    const users = await this.repository.find({
+      order: {
+        name: 'ASC',
+      },
+    });
+
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt,
+    }));
+  }
+
   create(user: Partial<User>) {
     return this.repository.save(user);
   }

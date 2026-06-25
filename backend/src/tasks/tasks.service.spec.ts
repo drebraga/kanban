@@ -24,6 +24,7 @@ describe('TasksService', () => {
   };
   const historyRepository = {
     create: jest.fn(),
+    find: jest.fn(),
     save: jest.fn(),
   };
 
@@ -101,6 +102,25 @@ describe('TasksService', () => {
       },
       order: {
         createdAt: 'DESC',
+      },
+    });
+  });
+
+  it('should list task history', async () => {
+    tasksRepository.findOne.mockResolvedValue({
+      id: 1,
+    });
+
+    await service.findHistory(1);
+
+    expect(historyRepository.find).toHaveBeenCalledWith({
+      where: {
+        task: {
+          id: 1,
+        },
+      },
+      order: {
+        createdAt: 'ASC',
       },
     });
   });
