@@ -11,6 +11,8 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
+  private readonly invalidCredentialsMessage = 'Email ou senha incorretos';
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -43,13 +45,13 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
 
     if (!valid) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
 
     const token = this.jwtService.sign({
