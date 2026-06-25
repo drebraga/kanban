@@ -26,6 +26,7 @@ services:
   backend:
     build: ./backend
     container_name: taskflow-backend
+    user: node
 
     ports:
       - "${PORT:-4000}:${PORT:-4000}"
@@ -44,6 +45,7 @@ services:
   frontend:
     build: ./frontend
     container_name: taskflow-frontend
+    user: node
 
     ports:
       - "3000:3000"
