@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ClipboardList, Loader2, Lock, LogOut, UserPlus } from "lucide-react";
+import { KanbanBoard } from "@/features/kanban/kanban-board";
 import { login, getMe, register } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import type { User } from "@/lib/api/types";
@@ -162,41 +163,7 @@ export function AuthScreen() {
           </div>
         </header>
 
-        <section className="mx-auto grid max-w-6xl gap-4 px-5 py-6 md:grid-cols-[1fr_280px]">
-          <div className="rounded-lg border border-zinc-200 bg-white p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-normal">
-                  Quadro Kanban
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-                  Autenticação conectada. O próximo ciclo adiciona as colunas,
-                  cards e movimentação por arrastar.
-                </p>
-              </div>
-              <Badge variant="secondary">Sessão ativa</Badge>
-            </div>
-
-            <div className="mt-6 grid gap-3 md:grid-cols-4">
-              {["A Fazer", "Em Andamento", "Em Revisão", "Concluído"].map(
-                (column) => (
-                  <div
-                    key={column}
-                    className="min-h-40 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-3"
-                  >
-                    <p className="text-sm font-medium">{column}</p>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-
-          <aside className="rounded-lg border border-zinc-200 bg-white p-5">
-            <p className="text-sm font-medium">Usuário</p>
-            <p className="mt-3 text-lg font-semibold">{user.name}</p>
-            <p className="mt-1 break-all text-sm text-zinc-500">{user.email}</p>
-          </aside>
-        </section>
+        <KanbanBoard token={token} />
       </main>
     );
   }
