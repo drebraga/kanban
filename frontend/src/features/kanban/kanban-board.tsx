@@ -1,6 +1,16 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { CalendarDays, Loader2, Plus, RefreshCw, UserRound } from "lucide-react";
 import { createTask, listTasks, updateTask } from "@/lib/api/tasks";
 import { listTags } from "@/lib/api/tags";
@@ -56,6 +66,14 @@ const initialTaskForm: TaskForm = {
   tagIds: [],
 };
 
+const statusByDroppableId = columns.reduce<Record<string, TaskStatus>>(
+  (acc, column) => ({
+    ...acc,
+    [`column-${column.status}`]: column.status,
+  }),
+  {}
+);
+
 export function KanbanBoard({ token }: { token: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -64,6 +82,14 @@ export function KanbanBoard({ token }: { token: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
 
   const tasksByStatus = useMemo(
     () =>
@@ -186,6 +212,25 @@ export function KanbanBoard({ token }: { token: string }) {
     }
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const taskId = Number(event.active.id);
+    const targetStatus = event.over
+      ? statusByDroppableId[String(event.over.id)]
+      : undefined;
+
+    if (!targetStatus || Number.isNaN(taskId)) {
+      return;
+    }
+
+    const task = tasks.find((currentTask) => currentTask.id === taskId);
+
+    if (!task) {
+      return;
+    }
+
+    void handleMoveTask(task, targetStatus);
+  }
+
   function toggleTag(tagId: number) {
     const value = String(tagId);
     updateForm(
@@ -225,99 +270,18 @@ export function KanbanBoard({ token }: { token: string }) {
             <Loader2 className="size-6 animate-spin text-zinc-500" />
           </div>
         ) : (
-          <div className="mt-6 grid gap-3 lg:grid-cols-4">
-            {columns.map((column) => (
-              <div
-                key={column.status}
-                className="flex min-h-72 flex-col rounded-lg border border-zinc-200 bg-zinc-50 p-3"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold">{column.label}</p>
-                  <Badge variant="secondary">
-                    {tasksByStatus[column.status].length}
-                  </Badge>
-                </div>
-
-                <div className="grid gap-3">
-                  {tasksByStatus[column.status].map((task) => (
-                    <article
-                      key={task.id}
-                      className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <h2 className="text-sm font-semibold leading-5">
-                          {task.title}
-                        </h2>
-                        <span
-                          className={`rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${priorityClasses[task.priority]}`}
-                        >
-                          {priorityLabels[task.priority]}
-                        </span>
-                      </div>
-
-                      {task.description ? (
-                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-600">
-                          {task.description}
-                        </p>
-                      ) : null}
-
-                      <div className="mt-3 grid gap-2 text-xs text-zinc-500">
-                        {task.responsible ? (
-                          <span className="flex items-center gap-1.5">
-                            <UserRound className="size-3.5" />
-                            {task.responsible.name}
-                          </span>
-                        ) : null}
-                        {task.dueDate ? (
-                          <span className="flex items-center gap-1.5">
-                            <CalendarDays className="size-3.5" />
-                            {new Intl.DateTimeFormat("pt-BR").format(
-                              new Date(task.dueDate)
-                            )}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {task.tags?.length ? (
-                        <div className="mt-3 flex flex-wrap gap-1">
-                          {task.tags.map((tag) => (
-                            <Badge key={tag.id} variant="outline">
-                              {tag.name}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-3 grid grid-cols-2 gap-1">
-                        {columns
-                          .filter((targetColumn) => targetColumn.status !== task.status)
-                          .slice(0, 3)
-                          .map((targetColumn) => (
-                            <Button
-                              key={targetColumn.status}
-                              type="button"
-                              variant="ghost"
-                              size="xs"
-                              onClick={() =>
-                                void handleMoveTask(task, targetColumn.status)
-                              }
-                            >
-                              {targetColumn.label}
-                            </Button>
-                          ))}
-                      </div>
-                    </article>
-                  ))}
-
-                  {!tasksByStatus[column.status].length ? (
-                    <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
-                      Sem tarefas
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <div className="mt-6 grid gap-3 lg:grid-cols-4">
+              {columns.map((column) => (
+                <KanbanColumn
+                  key={column.status}
+                  column={column}
+                  tasks={tasksByStatus[column.status]}
+                  onMoveTask={handleMoveTask}
+                />
+              ))}
+            </div>
+          </DndContext>
         )}
       </div>
 
@@ -423,5 +387,138 @@ export function KanbanBoard({ token }: { token: string }) {
         </form>
       </aside>
     </section>
+  );
+}
+
+function KanbanColumn({
+  column,
+  tasks,
+  onMoveTask,
+}: {
+  column: (typeof columns)[number];
+  tasks: Task[];
+  onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: `column-${column.status}`,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex min-h-72 flex-col rounded-lg border p-3 transition-colors ${
+        isOver
+          ? "border-zinc-500 bg-zinc-100"
+          : "border-zinc-200 bg-zinc-50"
+      }`}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-semibold">{column.label}</p>
+        <Badge variant="secondary">{tasks.length}</Badge>
+      </div>
+
+      <div className="grid gap-3">
+        {tasks.map((task) => (
+          <KanbanTaskCard key={task.id} task={task} onMoveTask={onMoveTask} />
+        ))}
+
+        {!tasks.length ? (
+          <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-center text-sm text-zinc-500">
+            Sem tarefas
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function KanbanTaskCard({
+  task,
+  onMoveTask,
+}: {
+  task: Task;
+  onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
+}) {
+  const { attributes, isDragging, listeners, setNodeRef, transform } =
+    useDraggable({
+      id: task.id,
+    });
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={{
+        transform: transform
+          ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+          : undefined,
+      }}
+      className={`rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition-shadow ${
+        isDragging ? "z-10 opacity-80 shadow-lg" : ""
+      }`}
+    >
+      <button
+        type="button"
+        className="w-full cursor-grab text-left active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <h2 className="text-sm font-semibold leading-5">{task.title}</h2>
+          <span
+            className={`rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${priorityClasses[task.priority]}`}
+          >
+            {priorityLabels[task.priority]}
+          </span>
+        </div>
+      </button>
+
+      {task.description ? (
+        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-600">
+          {task.description}
+        </p>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 text-xs text-zinc-500">
+        {task.responsible ? (
+          <span className="flex items-center gap-1.5">
+            <UserRound className="size-3.5" />
+            {task.responsible.name}
+          </span>
+        ) : null}
+        {task.dueDate ? (
+          <span className="flex items-center gap-1.5">
+            <CalendarDays className="size-3.5" />
+            {new Intl.DateTimeFormat("pt-BR").format(new Date(task.dueDate))}
+          </span>
+        ) : null}
+      </div>
+
+      {task.tags?.length ? (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {task.tags.map((tag) => (
+            <Badge key={tag.id} variant="outline">
+              {tag.name}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid grid-cols-2 gap-1">
+        {columns
+          .filter((targetColumn) => targetColumn.status !== task.status)
+          .slice(0, 3)
+          .map((targetColumn) => (
+            <Button
+              key={targetColumn.status}
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => void onMoveTask(task, targetColumn.status)}
+            >
+              {targetColumn.label}
+            </Button>
+          ))}
+      </div>
+    </article>
   );
 }
