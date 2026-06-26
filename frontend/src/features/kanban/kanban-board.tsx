@@ -129,7 +129,6 @@ export function KanbanBoard({ token }: { token: string }) {
   const [isTagSaving, setIsTagSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tagName, setTagName] = useState("");
-  const [editTagName, setEditTagName] = useState("");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editForm, setEditForm] = useState<TaskForm>(initialTaskForm);
   const [taskHistory, setTaskHistory] = useState<TaskHistory[]>([]);
@@ -223,7 +222,6 @@ export function KanbanBoard({ token }: { token: string }) {
   async function openEditTask(task: Task) {
     setEditingTask(task);
     setTaskHistory([]);
-    setEditTagName("");
     setEditForm({
       title: task.title,
       description: task.description ?? "",
@@ -320,7 +318,7 @@ export function KanbanBoard({ token }: { token: string }) {
       return;
     }
 
-    if (!editForm.responsibleId) {
+    if (!editForm.responsibleId && !editingTask.responsible) {
       setError("Selecione um responsável para atualizar a tarefa.");
       return;
     }
@@ -330,12 +328,17 @@ export function KanbanBoard({ token }: { token: string }) {
 
     try {
       const updatedTask = await updateTask(token, editingTask.id, {
-        title: editForm.title,
-        description: editForm.description || undefined,
+        title: editForm.title || editingTask.title,
+        description:
+          editForm.description || editingTask.description || undefined,
         status: editingTask.status,
-        priority: editForm.priority,
-        dueDate: editForm.dueDate || undefined,
-        responsibleId: Number(editForm.responsibleId),
+        priority: editForm.priority || editingTask.priority,
+        dueDate:
+          editForm.dueDate ||
+          (editingTask.dueDate ? editingTask.dueDate.slice(0, 10) : undefined),
+        responsibleId: Number(
+          editForm.responsibleId || editingTask.responsible?.id
+        ),
         tagIds: editForm.tagIds.map(Number),
       });
 
@@ -443,51 +446,6 @@ export function KanbanBoard({ token }: { token: string }) {
         )
       );
       setTagName("");
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "Não foi possível criar a tag."
-      );
-    } finally {
-      setIsTagSaving(false);
-    }
-  }
-
-  async function handleCreateEditTag() {
-    const normalizedName = editTagName.trim();
-
-    if (!normalizedName) {
-      return;
-    }
-
-    const existingTag = tags.find(
-      (tag) => tag.name.toLowerCase() === normalizedName.toLowerCase()
-    );
-
-    if (existingTag) {
-      const value = String(existingTag.id);
-
-      updateEditForm(
-        "tagIds",
-        editForm.tagIds.includes(value)
-          ? editForm.tagIds
-          : [...editForm.tagIds, value]
-      );
-      setEditTagName("");
-      return;
-    }
-
-    setIsTagSaving(true);
-    setError(null);
-
-    try {
-      const tag = await createTag(token, normalizedName);
-      setTags((current) =>
-        [...current, tag].sort((first, second) =>
-          first.name.localeCompare(second.name)
-        )
-      );
-      updateEditForm("tagIds", [...editForm.tagIds, String(tag.id)]);
-      setEditTagName("");
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Não foi possível criar a tag."
@@ -722,7 +680,6 @@ export function KanbanBoard({ token }: { token: string }) {
           if (!open) {
             setEditingTask(null);
             setTaskHistory([]);
-            setEditTagName("");
           }
         }}
       >
@@ -833,30 +790,6 @@ export function KanbanBoard({ token }: { token: string }) {
 
             <div className="grid gap-2">
               <p className="text-sm font-medium">Tags</p>
-              <div className="flex gap-2">
-                <Input
-                  value={editTagName}
-                  onChange={(event) => setEditTagName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    void handleCreateEditTag();
-                  }}
-                  placeholder="Nova tag"
-                />
-                <Button
-                  type="button"
-                  size="icon"
-                  disabled={isTagSaving || !editTagName.trim()}
-                  onClick={() => void handleCreateEditTag()}
-                  aria-label="Criar e vincular tag"
-                >
-                  {isTagSaving ? <Loader2 className="animate-spin" /> : <Plus />}
-                </Button>
-              </div>
               {tags.length ? (
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => (
