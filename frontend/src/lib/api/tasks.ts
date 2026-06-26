@@ -1,5 +1,10 @@
 import { apiRequest } from "./client";
-import type { CreateTaskPayload, Task, UpdateTaskPayload } from "./types";
+import type {
+  CreateTaskPayload,
+  Task,
+  TaskHistory,
+  UpdateTaskPayload,
+} from "./types";
 
 export function listTasks(token: string) {
   return apiRequest<Task[]>("/tasks", {
@@ -31,5 +36,11 @@ export function deleteTask(token: string, taskId: number) {
   return apiRequest<{ id: number; deleted: boolean }>(`/tasks/${taskId}`, {
     token,
     method: "DELETE",
+  });
+}
+
+export function listTaskHistory(token: string, taskId: number) {
+  return apiRequest<TaskHistory[]>(`/tasks/${taskId}/history`, {
+    token,
   });
 }

@@ -6,3 +6,18 @@ export function listTags(token: string) {
     token,
   });
 }
+
+export function createTag(token: string, name: string) {
+  return apiRequest<Tag>("/tags", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteTag(token: string, tagId: number) {
+  return apiRequest<{ id: number; deleted: boolean }>(`/tags/${tagId}`, {
+    token,
+    method: "DELETE",
+  });
+}

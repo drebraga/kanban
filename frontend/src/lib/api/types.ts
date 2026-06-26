@@ -41,6 +41,13 @@ export type Task = {
   updatedAt: string;
 };
 
+export type TaskHistory = {
+  id: number;
+  oldStatus: TaskStatus;
+  newStatus: TaskStatus;
+  createdAt: string;
+};
+
 export type CreateTaskPayload = {
   title: string;
   description?: string;

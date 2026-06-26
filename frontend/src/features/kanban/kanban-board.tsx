@@ -1,6 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -20,14 +27,21 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { createTask, deleteTask, listTasks, updateTask } from "@/lib/api/tasks";
-import { listTags } from "@/lib/api/tags";
+import {
+  createTask,
+  deleteTask,
+  listTaskHistory,
+  listTasks,
+  updateTask,
+} from "@/lib/api/tasks";
+import { createTag, deleteTag, listTags } from "@/lib/api/tags";
 import { listUsers } from "@/lib/api/users";
 import { ApiError } from "@/lib/api/client";
 import type {
   CreateTaskPayload,
   Tag,
   Task,
+  TaskHistory,
   TaskPriority,
   TaskStatus,
   User,
@@ -90,6 +104,19 @@ const statusByDroppableId = columns.reduce<Record<string, TaskStatus>>(
   {}
 );
 
+const statusLabels = columns.reduce<Record<TaskStatus, string>>(
+  (acc, column) => ({
+    ...acc,
+    [column.status]: column.label,
+  }),
+  {
+    TODO: "A Fazer",
+    IN_PROGRESS: "Em Andamento",
+    REVIEW: "Em Revisão",
+    DONE: "Concluído",
+  }
+);
+
 export function KanbanBoard({ token }: { token: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -98,9 +125,15 @@ export function KanbanBoard({ token }: { token: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isTagSaving, setIsTagSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tagName, setTagName] = useState("");
+  const [editTagName, setEditTagName] = useState("");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editForm, setEditForm] = useState<TaskForm>(initialTaskForm);
+  const [taskHistory, setTaskHistory] = useState<TaskHistory[]>([]);
+  const historyListRef = useRef<HTMLOListElement | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -160,6 +193,16 @@ export function KanbanBoard({ token }: { token: string }) {
     return () => window.clearTimeout(timeout);
   }, [loadBoard]);
 
+  useEffect(() => {
+    const historyList = historyListRef.current;
+
+    if (!historyList) {
+      return;
+    }
+
+    historyList.scrollTop = historyList.scrollHeight;
+  }, [taskHistory, isHistoryLoading]);
+
   function updateForm<K extends keyof TaskForm>(field: K, value: TaskForm[K]) {
     setForm((current) => ({
       ...current,
@@ -177,8 +220,10 @@ export function KanbanBoard({ token }: { token: string }) {
     }));
   }
 
-  function openEditTask(task: Task) {
+  async function openEditTask(task: Task) {
     setEditingTask(task);
+    setTaskHistory([]);
+    setEditTagName("");
     setEditForm({
       title: task.title,
       description: task.description ?? "",
@@ -187,6 +232,21 @@ export function KanbanBoard({ token }: { token: string }) {
       responsibleId: task.responsible ? String(task.responsible.id) : "",
       tagIds: task.tags?.map((tag) => String(tag.id)) ?? [],
     });
+
+    setIsHistoryLoading(true);
+
+    try {
+      const history = await listTaskHistory(token, task.id);
+      setTaskHistory(history);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível carregar o histórico da tarefa."
+      );
+    } finally {
+      setIsHistoryLoading(false);
+    }
   }
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
@@ -294,8 +354,10 @@ export function KanbanBoard({ token }: { token: string }) {
     }
   }
 
-  async function handleDeleteTask() {
-    if (!editingTask) {
+  async function handleDeleteTask(taskToDelete?: Task) {
+    const task = taskToDelete ?? editingTask;
+
+    if (!task) {
       return;
     }
 
@@ -303,11 +365,14 @@ export function KanbanBoard({ token }: { token: string }) {
     setError(null);
 
     try {
-      await deleteTask(token, editingTask.id);
+      await deleteTask(token, task.id);
       setTasks((current) =>
-        current.filter((task) => task.id !== editingTask.id)
+        current.filter((currentTask) => currentTask.id !== task.id)
       );
-      setEditingTask(null);
+
+      if (!taskToDelete) {
+        setEditingTask(null);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -358,6 +423,106 @@ export function KanbanBoard({ token }: { token: string }) {
     );
   }
 
+  async function handleCreateTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const normalizedName = tagName.trim();
+
+    if (!normalizedName) {
+      return;
+    }
+
+    setIsTagSaving(true);
+    setError(null);
+
+    try {
+      const tag = await createTag(token, normalizedName);
+      setTags((current) =>
+        [...current, tag].sort((first, second) =>
+          first.name.localeCompare(second.name)
+        )
+      );
+      setTagName("");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível criar a tag."
+      );
+    } finally {
+      setIsTagSaving(false);
+    }
+  }
+
+  async function handleCreateEditTag() {
+    const normalizedName = editTagName.trim();
+
+    if (!normalizedName) {
+      return;
+    }
+
+    const existingTag = tags.find(
+      (tag) => tag.name.toLowerCase() === normalizedName.toLowerCase()
+    );
+
+    if (existingTag) {
+      const value = String(existingTag.id);
+
+      updateEditForm(
+        "tagIds",
+        editForm.tagIds.includes(value)
+          ? editForm.tagIds
+          : [...editForm.tagIds, value]
+      );
+      setEditTagName("");
+      return;
+    }
+
+    setIsTagSaving(true);
+    setError(null);
+
+    try {
+      const tag = await createTag(token, normalizedName);
+      setTags((current) =>
+        [...current, tag].sort((first, second) =>
+          first.name.localeCompare(second.name)
+        )
+      );
+      updateEditForm("tagIds", [...editForm.tagIds, String(tag.id)]);
+      setEditTagName("");
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Não foi possível criar a tag."
+      );
+    } finally {
+      setIsTagSaving(false);
+    }
+  }
+
+  async function handleDeleteTag(tag: Tag) {
+    setIsTagSaving(true);
+    setError(null);
+
+    try {
+      await deleteTag(token, tag.id);
+      setTags((current) => current.filter((currentTag) => currentTag.id !== tag.id));
+      setForm((current) => ({
+        ...current,
+        tagIds: current.tagIds.filter((id) => id !== String(tag.id)),
+      }));
+      setEditForm((current) => ({
+        ...current,
+        tagIds: current.tagIds.filter((id) => id !== String(tag.id)),
+      }));
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível excluir a tag."
+      );
+    } finally {
+      setIsTagSaving(false);
+    }
+  }
+
   return (
     <section className="mx-auto grid max-w-7xl gap-4 px-5 py-6 xl:grid-cols-[1fr_320px]">
       <div className="min-w-0 rounded-lg border border-zinc-200 bg-white p-5">
@@ -394,8 +559,8 @@ export function KanbanBoard({ token }: { token: string }) {
                   key={column.status}
                   column={column}
                   tasks={tasksByStatus[column.status]}
-                  onMoveTask={handleMoveTask}
-                  onEditTask={openEditTask}
+                  onEditTask={(task) => void openEditTask(task)}
+                  onDeleteTask={(task) => void handleDeleteTask(task)}
                 />
               ))}
             </div>
@@ -503,9 +668,64 @@ export function KanbanBoard({ token }: { token: string }) {
             </p>
           ) : null}
         </form>
+
+        <div className="mt-6 border-t border-zinc-200 pt-5">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold">Tags</p>
+          </div>
+
+          <form className="mt-3 flex gap-2" onSubmit={handleCreateTag}>
+            <Input
+              value={tagName}
+              onChange={(event) => setTagName(event.target.value)}
+              placeholder="Nova tag"
+            />
+            <Button
+              size="icon"
+              disabled={isTagSaving || !tagName.trim()}
+              aria-label="Criar tag"
+            >
+              {isTagSaving ? <Loader2 className="animate-spin" /> : <Plus />}
+            </Button>
+          </form>
+
+          {tags.length ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-medium text-zinc-700"
+                >
+                  {tag.name}
+                  <button
+                    type="button"
+                    className="cursor-pointer text-zinc-400 hover:text-red-600"
+                    onClick={() => void handleDeleteTag(tag)}
+                    aria-label={`Excluir tag ${tag.name}`}
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs leading-5 text-zinc-500">
+              Nenhuma tag cadastrada.
+            </p>
+          )}
+        </div>
       </aside>
 
-      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+      <Dialog
+        open={!!editingTask}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingTask(null);
+            setTaskHistory([]);
+            setEditTagName("");
+          }
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar tarefa</DialogTitle>
@@ -611,9 +831,33 @@ export function KanbanBoard({ token }: { token: string }) {
               </label>
             </div>
 
-            {tags.length ? (
-              <div className="grid gap-2">
-                <p className="text-sm font-medium">Tags</p>
+            <div className="grid gap-2">
+              <p className="text-sm font-medium">Tags</p>
+              <div className="flex gap-2">
+                <Input
+                  value={editTagName}
+                  onChange={(event) => setEditTagName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    void handleCreateEditTag();
+                  }}
+                  placeholder="Nova tag"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  disabled={isTagSaving || !editTagName.trim()}
+                  onClick={() => void handleCreateEditTag()}
+                  aria-label="Criar e vincular tag"
+                >
+                  {isTagSaving ? <Loader2 className="animate-spin" /> : <Plus />}
+                </Button>
+              </div>
+              {tags.length ? (
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => (
                     <button
@@ -630,8 +874,61 @@ export function KanbanBoard({ token }: { token: string }) {
                     </button>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  Nenhuma tag cadastrada.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Histórico</p>
+                {isHistoryLoading ? (
+                  <Loader2 className="size-4 animate-spin text-zinc-500" />
+                ) : null}
               </div>
-            ) : null}
+
+              {taskHistory.length ? (
+                <ol
+                  ref={historyListRef}
+                  className="grid max-h-44 gap-2 overflow-y-auto pr-1"
+                >
+                  {taskHistory.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="rounded-md border border-zinc-200 bg-white p-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="outline">
+                          {columns.find(
+                            (column) => column.status === entry.oldStatus
+                          )?.label ?? entry.oldStatus}
+                        </Badge>
+                        <span className="text-zinc-400">para</span>
+                        <Badge variant="secondary">
+                          {columns.find(
+                            (column) => column.status === entry.newStatus
+                          )?.label ?? entry.newStatus}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {new Intl.DateTimeFormat("pt-BR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }).format(new Date(entry.createdAt))}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-zinc-500">
+                  {isHistoryLoading
+                    ? "Carregando movimentações..."
+                    : "Nenhuma movimentação registrada."}
+                </p>
+              )}
+            </div>
 
             <DialogFooter className="mt-2">
               <Button
@@ -658,13 +955,13 @@ export function KanbanBoard({ token }: { token: string }) {
 function KanbanColumn({
   column,
   tasks,
-  onMoveTask,
   onEditTask,
+  onDeleteTask,
 }: {
   column: (typeof columns)[number];
   tasks: Task[];
-  onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
   onEditTask: (task: Task) => void;
+  onDeleteTask: (task: Task) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: `column-${column.status}`,
@@ -689,8 +986,8 @@ function KanbanColumn({
           <KanbanTaskCard
             key={task.id}
             task={task}
-            onMoveTask={onMoveTask}
             onEditTask={onEditTask}
+            onDeleteTask={onDeleteTask}
           />
         ))}
 
@@ -706,12 +1003,12 @@ function KanbanColumn({
 
 function KanbanTaskCard({
   task,
-  onMoveTask,
   onEditTask,
+  onDeleteTask,
 }: {
   task: Task;
-  onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
   onEditTask: (task: Task) => void;
+  onDeleteTask: (task: Task) => void;
 }) {
   const { attributes, isDragging, listeners, setNodeRef, transform } =
     useDraggable({
@@ -729,78 +1026,75 @@ function KanbanTaskCard({
       className={`rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition-shadow ${
         isDragging ? "z-10 opacity-80 shadow-lg" : ""
       }`}
+      onDoubleClick={() => onEditTask(task)}
+      {...listeners}
+      {...attributes}
     >
-      <button
-        type="button"
-        className="w-full cursor-grab text-left active:cursor-grabbing"
-        {...listeners}
-        {...attributes}
-      >
+      <div className="cursor-grab active:cursor-grabbing">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-sm font-semibold leading-5">{task.title}</h2>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold leading-5">{task.title}</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              {statusLabels[task.status]}
+            </p>
+          </div>
           <span
             className={`rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${priorityClasses[task.priority]}`}
           >
             {priorityLabels[task.priority]}
           </span>
         </div>
-      </button>
 
-      {task.description ? (
-        <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-600">
-          {task.description}
-        </p>
-      ) : null}
-
-      <div className="mt-3 grid gap-2 text-xs text-zinc-500">
-        {task.responsible ? (
-          <span className="flex items-center gap-1.5">
-            <UserRound className="size-3.5" />
-            {task.responsible.name}
-          </span>
+        {task.tags?.length ? (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {task.tags.map((tag) => (
+              <Badge key={tag.id} variant="outline">
+                {tag.name}
+              </Badge>
+            ))}
+          </div>
         ) : null}
-        {task.dueDate ? (
-          <span className="flex items-center gap-1.5">
-            <CalendarDays className="size-3.5" />
-            {new Intl.DateTimeFormat("pt-BR").format(new Date(task.dueDate))}
-          </span>
-        ) : null}
-      </div>
 
-      {task.tags?.length ? (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {task.tags.map((tag) => (
-            <Badge key={tag.id} variant="outline">
-              {tag.name}
-            </Badge>
-          ))}
+        <div className="mt-3 grid gap-2 text-xs text-zinc-500">
+          {task.responsible ? (
+            <span className="flex items-center gap-1.5">
+              <UserRound className="size-3.5" />
+              {task.responsible.name}
+            </span>
+          ) : null}
+          {task.dueDate ? (
+            <span className="flex items-center gap-1.5">
+              <CalendarDays className="size-3.5" />
+              {new Intl.DateTimeFormat("pt-BR").format(new Date(task.dueDate))}
+            </span>
+          ) : null}
         </div>
-      ) : null}
+
+      </div>
 
       <div className="mt-3 grid grid-cols-2 gap-1">
         <Button
           type="button"
           variant="outline"
           size="xs"
+          className="cursor-pointer"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onEditTask(task)}
         >
           <Pencil />
           Editar
         </Button>
-        {columns
-          .filter((targetColumn) => targetColumn.status !== task.status)
-          .slice(0, 2)
-          .map((targetColumn) => (
-            <Button
-              key={targetColumn.status}
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() => void onMoveTask(task, targetColumn.status)}
-            >
-              {targetColumn.label}
-            </Button>
-          ))}
+        <Button
+          type="button"
+          variant="destructive"
+          size="xs"
+          className="cursor-pointer"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onDeleteTask(task)}
+        >
+          <Trash2 />
+          Excluir
+        </Button>
       </div>
     </article>
   );
