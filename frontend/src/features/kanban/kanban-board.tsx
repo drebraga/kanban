@@ -11,8 +11,16 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { CalendarDays, Loader2, Plus, RefreshCw, UserRound } from "lucide-react";
-import { createTask, listTasks, updateTask } from "@/lib/api/tasks";
+import {
+  CalendarDays,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  UserRound,
+} from "lucide-react";
+import { createTask, deleteTask, listTasks, updateTask } from "@/lib/api/tasks";
 import { listTags } from "@/lib/api/tags";
 import { listUsers } from "@/lib/api/users";
 import { ApiError } from "@/lib/api/client";
@@ -28,6 +36,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const columns: Array<{ status: TaskStatus; label: string }> = [
   { status: "TODO", label: "A Fazer" },
@@ -81,7 +97,10 @@ export function KanbanBoard({ token }: { token: string }) {
   const [form, setForm] = useState<TaskForm>(initialTaskForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editForm, setEditForm] = useState<TaskForm>(initialTaskForm);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -148,6 +167,28 @@ export function KanbanBoard({ token }: { token: string }) {
     }));
   }
 
+  function updateEditForm<K extends keyof TaskForm>(
+    field: K,
+    value: TaskForm[K]
+  ) {
+    setEditForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function openEditTask(task: Task) {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title,
+      description: task.description ?? "",
+      priority: task.priority,
+      dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
+      responsibleId: task.responsible ? String(task.responsible.id) : "",
+      tagIds: task.tags?.map((tag) => String(tag.id)) ?? [],
+    });
+  }
+
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -212,6 +253,72 @@ export function KanbanBoard({ token }: { token: string }) {
     }
   }
 
+  async function handleUpdateTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingTask) {
+      return;
+    }
+
+    if (!editForm.responsibleId) {
+      setError("Selecione um responsável para atualizar a tarefa.");
+      return;
+    }
+
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const updatedTask = await updateTask(token, editingTask.id, {
+        title: editForm.title,
+        description: editForm.description || undefined,
+        status: editingTask.status,
+        priority: editForm.priority,
+        dueDate: editForm.dueDate || undefined,
+        responsibleId: Number(editForm.responsibleId),
+        tagIds: editForm.tagIds.map(Number),
+      });
+
+      setTasks((current) =>
+        current.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+      );
+      setEditingTask(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível atualizar a tarefa."
+      );
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!editingTask) {
+      return;
+    }
+
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      await deleteTask(token, editingTask.id);
+      setTasks((current) =>
+        current.filter((task) => task.id !== editingTask.id)
+      );
+      setEditingTask(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível excluir a tarefa."
+      );
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const taskId = Number(event.active.id);
     const targetStatus = event.over
@@ -238,6 +345,16 @@ export function KanbanBoard({ token }: { token: string }) {
       form.tagIds.includes(value)
         ? form.tagIds.filter((id) => id !== value)
         : [...form.tagIds, value]
+    );
+  }
+
+  function toggleEditTag(tagId: number) {
+    const value = String(tagId);
+    updateEditForm(
+      "tagIds",
+      editForm.tagIds.includes(value)
+        ? editForm.tagIds.filter((id) => id !== value)
+        : [...editForm.tagIds, value]
     );
   }
 
@@ -278,6 +395,7 @@ export function KanbanBoard({ token }: { token: string }) {
                   column={column}
                   tasks={tasksByStatus[column.status]}
                   onMoveTask={handleMoveTask}
+                  onEditTask={openEditTask}
                 />
               ))}
             </div>
@@ -386,6 +504,153 @@ export function KanbanBoard({ token }: { token: string }) {
           ) : null}
         </form>
       </aside>
+
+      <Dialog open={!!editingTask} onOpenChange={(open) => !open && setEditingTask(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar tarefa</DialogTitle>
+            <DialogDescription>
+              Atualize os campos do card selecionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="grid gap-3" onSubmit={handleUpdateTask}>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Título
+              <Input
+                value={editForm.title}
+                onChange={(event) => updateEditForm("title", event.target.value)}
+                required
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-sm font-medium">
+              Descrição
+              <Textarea
+                value={editForm.description}
+                onChange={(event) =>
+                  updateEditForm("description", event.target.value)
+                }
+                rows={4}
+              />
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1.5 text-sm font-medium">
+                Responsável
+                <select
+                  className="h-8 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-zinc-500"
+                  value={editForm.responsibleId}
+                  onChange={(event) =>
+                    updateEditForm("responsibleId", event.target.value)
+                  }
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {users.map((responsible) => (
+                    <option key={responsible.id} value={responsible.id}>
+                      {responsible.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1.5 text-sm font-medium">
+                Prioridade
+                <select
+                  className="h-8 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-zinc-500"
+                  value={editForm.priority}
+                  onChange={(event) =>
+                    updateEditForm(
+                      "priority",
+                      event.target.value as TaskPriority
+                    )
+                  }
+                >
+                  <option value="LOW">Baixa</option>
+                  <option value="MEDIUM">Média</option>
+                  <option value="HIGH">Alta</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1.5 text-sm font-medium">
+                Status
+                <select
+                  className="h-8 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-zinc-500"
+                  value={editingTask?.status ?? "TODO"}
+                  onChange={(event) => {
+                    if (!editingTask) {
+                      return;
+                    }
+
+                    setEditingTask({
+                      ...editingTask,
+                      status: event.target.value as TaskStatus,
+                    });
+                  }}
+                >
+                  {columns.map((column) => (
+                    <option key={column.status} value={column.status}>
+                      {column.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1.5 text-sm font-medium">
+                Data de entrega
+                <Input
+                  type="date"
+                  value={editForm.dueDate}
+                  onChange={(event) =>
+                    updateEditForm("dueDate", event.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            {tags.length ? (
+              <div className="grid gap-2">
+                <p className="text-sm font-medium">Tags</p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                        editForm.tagIds.includes(String(tag.id))
+                          ? "border-zinc-950 bg-zinc-950 text-white"
+                          : "border-zinc-300 bg-white text-zinc-700"
+                      }`}
+                      onClick={() => toggleEditTag(tag.id)}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <DialogFooter className="mt-2">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleDeleteTask()}
+                disabled={isUpdating}
+              >
+                <Trash2 />
+                Excluir
+              </Button>
+              <Button disabled={isUpdating}>
+                {isUpdating ? <Loader2 className="animate-spin" /> : null}
+                Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -394,10 +659,12 @@ function KanbanColumn({
   column,
   tasks,
   onMoveTask,
+  onEditTask,
 }: {
   column: (typeof columns)[number];
   tasks: Task[];
   onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
+  onEditTask: (task: Task) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: `column-${column.status}`,
@@ -419,7 +686,12 @@ function KanbanColumn({
 
       <div className="grid gap-3">
         {tasks.map((task) => (
-          <KanbanTaskCard key={task.id} task={task} onMoveTask={onMoveTask} />
+          <KanbanTaskCard
+            key={task.id}
+            task={task}
+            onMoveTask={onMoveTask}
+            onEditTask={onEditTask}
+          />
         ))}
 
         {!tasks.length ? (
@@ -435,9 +707,11 @@ function KanbanColumn({
 function KanbanTaskCard({
   task,
   onMoveTask,
+  onEditTask,
 }: {
   task: Task;
   onMoveTask: (task: Task, status: TaskStatus) => Promise<void>;
+  onEditTask: (task: Task) => void;
 }) {
   const { attributes, isDragging, listeners, setNodeRef, transform } =
     useDraggable({
@@ -504,9 +778,18 @@ function KanbanTaskCard({
       ) : null}
 
       <div className="mt-3 grid grid-cols-2 gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() => onEditTask(task)}
+        >
+          <Pencil />
+          Editar
+        </Button>
         {columns
           .filter((targetColumn) => targetColumn.status !== task.status)
-          .slice(0, 3)
+          .slice(0, 2)
           .map((targetColumn) => (
             <Button
               key={targetColumn.status}

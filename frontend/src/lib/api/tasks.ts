@@ -26,3 +26,10 @@ export function updateTask(
     body: JSON.stringify(payload),
   });
 }
+
+export function deleteTask(token: string, taskId: number) {
+  return apiRequest<{ id: number; deleted: boolean }>(`/tasks/${taskId}`, {
+    token,
+    method: "DELETE",
+  });
+}
