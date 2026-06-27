@@ -6,9 +6,13 @@ import { TasksController } from './tasks.controller';
 import { User } from 'src/users/entities/users.entity';
 import { Tag } from 'src/tags/entities/tags.entity';
 import { TaskHistory } from 'src/task-history/entities/task-history.entity';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task, User, Tag, TaskHistory])],
+  imports: [
+    TypeOrmModule.forFeature([Task, User, Tag, TaskHistory]),
+    MailModule,
+  ],
   exports: [TypeOrmModule, TasksService],
   providers: [TasksService],
   controllers: [TasksController],

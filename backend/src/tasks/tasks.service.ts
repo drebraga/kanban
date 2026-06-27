@@ -7,6 +7,7 @@ import { UpdateTaskDto } from './dto/tasks-update.dto';
 import { User } from 'src/users/entities/users.entity';
 import { Tag } from 'src/tags/entities/tags.entity';
 import { TaskHistory } from 'src/task-history/entities/task-history.entity';
+import { MailQueueService } from 'src/mail/mail-queue.service';
 
 @Injectable()
 export class TasksService {
@@ -19,6 +20,7 @@ export class TasksService {
     private readonly tagsRepository: Repository<Tag>,
     @InjectRepository(TaskHistory)
     private readonly historyRepository: Repository<TaskHistory>,
+    private readonly mailQueueService: MailQueueService,
   ) {}
 
   async create(dto: CreateTaskDto) {
@@ -34,7 +36,16 @@ export class TasksService {
       tags,
     });
 
-    return this.tasksRepository.save(task);
+    const savedTask = await this.tasksRepository.save(task);
+
+    await this.mailQueueService.enqueueTaskCreatedEmail({
+      taskId: savedTask.id,
+      taskTitle: savedTask.title,
+      responsibleName: responsible.name,
+      responsibleEmail: responsible.email,
+    });
+
+    return savedTask;
   }
 
   findAll() {
@@ -122,6 +133,15 @@ export class TasksService {
           newStatus: dto.status,
         }),
       );
+
+      await this.mailQueueService.enqueueTaskStatusChangedEmail({
+        taskId: savedTask.id,
+        taskTitle: savedTask.title,
+        responsibleName: savedTask.responsible.name,
+        responsibleEmail: savedTask.responsible.email,
+        oldStatus: previousStatus,
+        newStatus: dto.status,
+      });
     }
 
     return savedTask;

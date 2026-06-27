@@ -6,6 +6,8 @@ import { User } from 'src/users/entities/users.entity';
 import { Tag } from 'src/tags/entities/tags.entity';
 import { TaskHistory } from 'src/task-history/entities/task-history.entity';
 import { TaskPriority } from 'src/enums/task-priority.enum';
+import { MailQueueService } from 'src/mail/mail-queue.service';
+import { TaskStatus } from 'src/enums/task-status.enum';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -26,6 +28,10 @@ describe('TasksService', () => {
     create: jest.fn(),
     find: jest.fn(),
     save: jest.fn(),
+  };
+  const mailQueueService = {
+    enqueueTaskCreatedEmail: jest.fn(),
+    enqueueTaskStatusChangedEmail: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -48,6 +54,10 @@ describe('TasksService', () => {
           provide: getRepositoryToken(TaskHistory),
           useValue: historyRepository,
         },
+        {
+          provide: MailQueueService,
+          useValue: mailQueueService,
+        },
       ],
     }).compile();
 
@@ -62,9 +72,12 @@ describe('TasksService', () => {
   it('should create a task with responsible and tags', async () => {
     const responsible = {
       id: 1,
+      name: 'Andre',
+      email: 'andre@example.com',
     };
     const tags = [{ id: 1 }];
     const task = {
+      id: 1,
       title: 'Implementar Kanban',
     };
 
@@ -89,6 +102,12 @@ describe('TasksService', () => {
       dueDate: undefined,
       responsible,
       tags,
+    });
+    expect(mailQueueService.enqueueTaskCreatedEmail).toHaveBeenCalledWith({
+      taskId: 1,
+      taskTitle: 'Implementar Kanban',
+      responsibleName: 'Andre',
+      responsibleEmail: 'andre@example.com',
     });
   });
 
@@ -123,5 +142,44 @@ describe('TasksService', () => {
         createdAt: 'ASC',
       },
     });
+  });
+
+  it('should enqueue email when task status changes', async () => {
+    const task = {
+      id: 1,
+      title: 'Implementar Kanban',
+      status: TaskStatus.TODO,
+      responsible: {
+        id: 1,
+        name: 'Andre',
+        email: 'andre@example.com',
+      },
+    };
+
+    tasksRepository.findOne.mockResolvedValue(task);
+    tasksRepository.save.mockResolvedValue({
+      ...task,
+      status: TaskStatus.DONE,
+    });
+    historyRepository.create.mockReturnValue({
+      task,
+      oldStatus: TaskStatus.TODO,
+      newStatus: TaskStatus.DONE,
+    });
+
+    await service.update(1, {
+      status: TaskStatus.DONE,
+    });
+
+    expect(mailQueueService.enqueueTaskStatusChangedEmail).toHaveBeenCalledWith(
+      {
+        taskId: 1,
+        taskTitle: 'Implementar Kanban',
+        responsibleName: 'Andre',
+        responsibleEmail: 'andre@example.com',
+        oldStatus: TaskStatus.TODO,
+        newStatus: TaskStatus.DONE,
+      },
+    );
   });
 });
