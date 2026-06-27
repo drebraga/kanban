@@ -65,6 +65,211 @@ Para reiniciar apenas o backend depois de alterar variáveis de ambiente:
 docker compose restart backend
 ```
 
+## Como Rodar Localmente Sem Docker
+
+### 1. Pré-requisitos
+
+Instale na máquina:
+
+- Node.js `>=20.11`
+- npm
+- PostgreSQL `>=16`
+- Redis `>=7`
+
+Confirme as versões:
+
+```bash
+node -v
+npm -v
+psql --version
+redis-server --version
+```
+
+### 2. Criar o banco PostgreSQL
+
+Acesse o PostgreSQL com um usuário administrador:
+
+```bash
+psql -U postgres
+```
+
+Crie o banco usado pela aplicação:
+
+```sql
+CREATE DATABASE taskflow;
+```
+
+Saia do `psql`:
+
+```sql
+\q
+```
+
+Se o seu PostgreSQL local usa outro usuário ou senha, ajuste `DB_USER` e `DB_PASSWORD` no `.env`.
+
+### 3. Iniciar o Redis
+
+Em um terminal separado, suba o Redis:
+
+```bash
+redis-server
+```
+
+Em outro terminal, valide:
+
+```bash
+redis-cli ping
+```
+
+O retorno esperado é:
+
+```text
+PONG
+```
+
+### 4. Configurar variáveis de ambiente
+
+Crie o `.env` na raiz do projeto:
+
+```bash
+cp .env.example .env
+```
+
+Para rodar localmente sem Docker, use `localhost` nos serviços:
+
+```env
+PORT=4000
+FRONTEND_URL=http://localhost:3000
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=taskflow
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+JWT_SECRET=change-me-in-production
+NEXT_PUBLIC_API_URL=http://localhost:4000
+MAIL_WORKER_ENABLED=true
+
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM_NAME=TaskFlow
+SMTP_FROM_ADDRESS=no-reply@example.com
+```
+
+Para testar e-mail real, preencha as variáveis SMTP. Para Gmail, use senha de app.
+
+### 5. Instalar dependências
+
+Backend:
+
+```bash
+cd backend
+npm install
+```
+
+Frontend:
+
+```bash
+cd ../frontend
+npm install
+```
+
+Volte para a raiz quando terminar:
+
+```bash
+cd ..
+```
+
+### 6. Rodar o backend
+
+Em um terminal:
+
+```bash
+cd backend
+npm run start:dev
+```
+
+O backend fica em:
+
+```text
+http://localhost:4000
+```
+
+### 7. Rodar o worker de e-mail
+
+Em outro terminal:
+
+```bash
+cd backend
+npm run start:worker
+```
+
+Esse processo consome a fila BullMQ no Redis e envia os e-mails de forma assíncrona.
+
+### 8. Rodar o frontend
+
+Em outro terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Acesse:
+
+```text
+http://localhost:3000
+```
+
+### 9. Ordem recomendada de execução
+
+Use esta ordem para evitar erro de conexão:
+
+```text
+1. PostgreSQL iniciado
+2. Redis iniciado
+3. Backend: npm run start:dev
+4. Worker: npm run start:worker
+5. Frontend: npm run dev
+```
+
+### 10. Validação rápida
+
+Backend:
+
+```bash
+curl http://localhost:4000
+```
+
+Retorno esperado:
+
+```text
+Hello World!
+```
+
+Frontend:
+
+```text
+http://localhost:3000
+```
+
+Fluxo recomendado para testar:
+
+1. Criar uma conta.
+2. Fazer login.
+3. Criar tags, se quiser.
+4. Criar uma tarefa com título, descrição, responsável, prioridade e data de entrega.
+5. Arrastar o card entre colunas.
+6. Abrir o modal de edição e conferir histórico.
+7. Acessar a aba de dados analíticos.
+
 ## Variáveis de Ambiente
 
 Arquivo: `.env`
