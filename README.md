@@ -34,7 +34,7 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 - Métricas por status, prioridade, responsável, tarefas atrasadas e próximas do prazo.
 - Filtro por período e fluxo de conclusão ao longo do tempo.
 - Fila assíncrona para e-mails com worker separado.
-- Envio real de e-mail via SMTP na criação, alteração de status e prazo próximo.
+- Envio real de e-mail via SMTP na criação, alteração de status e prazo próximo agendado.
 
 ## Como Rodar Com Docker
 

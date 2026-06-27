@@ -46,7 +46,7 @@ export class TasksService {
       responsibleEmail: responsible.email,
     });
 
-    await this.enqueueDueSoonEmailIfNeeded(savedTask);
+    await this.scheduleDueSoonEmail(savedTask);
 
     return savedTask;
   }
@@ -147,8 +147,12 @@ export class TasksService {
       });
     }
 
-    if (dto.dueDate !== undefined) {
-      await this.enqueueDueSoonEmailIfNeeded(savedTask);
+    if (
+      dto.dueDate !== undefined ||
+      dto.responsibleId !== undefined ||
+      dto.status !== undefined
+    ) {
+      await this.scheduleDueSoonEmail(savedTask);
     }
 
     return savedTask;
@@ -156,6 +160,7 @@ export class TasksService {
 
   async remove(id: number) {
     const task = await this.findOne(id);
+    await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
     await this.tasksRepository.remove(task);
 
     return {
@@ -192,30 +197,28 @@ export class TasksService {
     return tags;
   }
 
-  private async enqueueDueSoonEmailIfNeeded(task: Task) {
+  private async scheduleDueSoonEmail(task: Task) {
     if (!task.dueDate || task.status === TaskStatus.DONE) {
+      await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
       return;
     }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     const dueDate = new Date(task.dueDate);
-    dueDate.setHours(0, 0, 0, 0);
 
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 7);
-
-    if (dueDate < today || dueDate > nextWeek) {
+    if (dueDate < new Date()) {
+      await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
       return;
     }
 
-    await this.mailQueueService.enqueueTaskDueSoonEmail({
-      taskId: task.id,
-      taskTitle: task.title,
-      responsibleName: task.responsible.name,
-      responsibleEmail: task.responsible.email,
-      dueDate: task.dueDate.toISOString(),
-    });
+    await this.mailQueueService.scheduleTaskDueSoonEmail(
+      {
+        taskId: task.id,
+        taskTitle: task.title,
+        responsibleName: task.responsible.name,
+        responsibleEmail: task.responsible.email,
+        dueDate: task.dueDate.toISOString(),
+      },
+      dueDate,
+    );
   }
 }

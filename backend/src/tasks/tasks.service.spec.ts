@@ -32,6 +32,8 @@ describe('TasksService', () => {
   const mailQueueService = {
     enqueueTaskCreatedEmail: jest.fn(),
     enqueueTaskStatusChangedEmail: jest.fn(),
+    scheduleTaskDueSoonEmail: jest.fn(),
+    cancelTaskDueSoonEmail: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -109,6 +111,7 @@ describe('TasksService', () => {
       responsibleName: 'Andre',
       responsibleEmail: 'andre@example.com',
     });
+    expect(mailQueueService.cancelTaskDueSoonEmail).toHaveBeenCalledWith(1);
   });
 
   it('should list tasks with relations', async () => {
@@ -181,5 +184,6 @@ describe('TasksService', () => {
         newStatus: TaskStatus.DONE,
       },
     );
+    expect(mailQueueService.cancelTaskDueSoonEmail).toHaveBeenCalledWith(1);
   });
 });

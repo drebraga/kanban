@@ -101,6 +101,35 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
     await this.queue.add(TASK_DUE_SOON_MAIL_JOB, payload);
   }
 
+  async scheduleTaskDueSoonEmail(payload: TaskDueSoonMailJob, dueDate: Date) {
+    const jobId = this.createDueSoonJobId(payload.taskId);
+    const existingJob = await this.queue.getJob(jobId);
+
+    await existingJob?.remove();
+
+    const notifyAt = new Date(dueDate);
+    notifyAt.setHours(9, 0, 0, 0);
+    notifyAt.setDate(notifyAt.getDate() - 7);
+
+    const delay = Math.max(notifyAt.getTime() - Date.now(), 0);
+
+    await this.queue.add(TASK_DUE_SOON_MAIL_JOB, payload, {
+      jobId,
+      delay,
+    });
+  }
+
+  async cancelTaskDueSoonEmail(taskId: number) {
+    const existingJob = await this.queue.getJob(
+      this.createDueSoonJobId(taskId),
+    );
+    await existingJob?.remove();
+  }
+
+  private createDueSoonJobId(taskId: number) {
+    return `${TASK_DUE_SOON_MAIL_JOB}:${taskId}`;
+  }
+
   private async processMailJob(job: Job<TaskMailJob>) {
     if (!this.transporter) {
       throw new Error(
