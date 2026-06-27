@@ -19,12 +19,16 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import {
+  BarChart3,
   CalendarDays,
+  CheckCircle2,
+  Clock3,
+  ListChecks,
   Loader2,
   Pencil,
   Plus,
-  RefreshCw,
   Trash2,
+  TriangleAlert,
   UserRound,
 } from "lucide-react";
 import {
@@ -87,6 +91,8 @@ type TaskForm = {
   tagIds: string[];
 };
 
+export type BoardView = "board" | "analytics";
+
 const initialTaskForm: TaskForm = {
   title: "",
   description: "",
@@ -117,7 +123,15 @@ const statusLabels = columns.reduce<Record<TaskStatus, string>>(
   }
 );
 
-export function KanbanBoard({ token }: { token: string }) {
+const priorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
+
+export function KanbanBoard({
+  token,
+  activeView,
+}: {
+  token: string;
+  activeView: BoardView;
+}) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -130,6 +144,7 @@ export function KanbanBoard({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [tagName, setTagName] = useState("");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [editForm, setEditForm] = useState<TaskForm>(initialTaskForm);
   const [taskHistory, setTaskHistory] = useState<TaskHistory[]>([]);
   const historyListRef = useRef<HTMLOListElement | null>(null);
@@ -357,8 +372,8 @@ export function KanbanBoard({ token }: { token: string }) {
     }
   }
 
-  async function handleDeleteTask(taskToDelete?: Task) {
-    const task = taskToDelete ?? editingTask;
+  async function handleDeleteTask(taskToRemove?: Task) {
+    const task = taskToRemove ?? editingTask;
 
     if (!task) {
       return;
@@ -373,9 +388,10 @@ export function KanbanBoard({ token }: { token: string }) {
         current.filter((currentTask) => currentTask.id !== task.id)
       );
 
-      if (!taskToDelete) {
+      if (!taskToRemove || editingTask?.id === task.id) {
         setEditingTask(null);
       }
+      setTaskToDelete(null);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -482,58 +498,56 @@ export function KanbanBoard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mx-auto grid max-w-7xl gap-4 px-5 py-6 xl:grid-cols-[1fr_320px]">
-      <div className="min-w-0 rounded-lg border border-zinc-200 bg-white p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-normal">
-              Quadro Kanban
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-              Visualize as tarefas por status e avance cards entre colunas.
-            </p>
-          </div>
-          <Button variant="outline" onClick={loadBoard} disabled={isLoading}>
-            <RefreshCw className={isLoading ? "animate-spin" : undefined} />
-            Atualizar
-          </Button>
-        </div>
+    <section className="mx-auto flex min-h-[calc(100vh-73px)] max-w-7xl flex-col gap-4 px-5 py-6">
+      {error ? (
+        <p className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
 
-        {error ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        {isLoading ? (
-          <div className="flex min-h-72 items-center justify-center">
-            <Loader2 className="size-6 animate-spin text-zinc-500" />
-          </div>
-        ) : (
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-            <div className="mt-6 grid gap-3 lg:grid-cols-4">
-              {columns.map((column) => (
-                <KanbanColumn
-                  key={column.status}
-                  column={column}
-                  tasks={tasksByStatus[column.status]}
-                  onEditTask={(task) => void openEditTask(task)}
-                  onDeleteTask={(task) => void handleDeleteTask(task)}
-                />
-              ))}
+      {activeView === "analytics" ? (
+        <KanbanAnalytics isLoading={isLoading} tasks={tasks} users={users} />
+      ) : (
+        <div className="grid flex-1 gap-4 xl:grid-cols-[1fr_320px]">
+          <div className="flex min-h-[calc(100vh-169px)] flex-col rounded-lg border border-zinc-200 bg-white p-5">
+            <div className="shrink-0">
+              <h1 className="text-2xl font-semibold tracking-normal">
+                Quadro Kanban
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
+                Visualize as tarefas por status e avance cards entre colunas.
+              </p>
             </div>
-          </DndContext>
-        )}
-      </div>
 
-      <aside className="rounded-lg border border-zinc-200 bg-white p-5">
+            {isLoading ? (
+              <div className="flex min-h-72 flex-1 items-center justify-center">
+                <Loader2 className="size-6 animate-spin text-zinc-500" />
+              </div>
+            ) : (
+              <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                <div className="mt-6 grid flex-1 items-start gap-3 lg:grid-cols-4">
+                  {columns.map((column) => (
+                    <KanbanColumn
+                      key={column.status}
+                    column={column}
+                    tasks={tasksByStatus[column.status]}
+                    onEditTask={(task) => void openEditTask(task)}
+                    onDeleteTask={setTaskToDelete}
+                  />
+                  ))}
+                </div>
+              </DndContext>
+            )}
+          </div>
+
+          <aside className="self-start rounded-lg border border-zinc-200 bg-white p-4">
         <div className="flex items-center gap-2">
           <Plus className="size-4" />
           <p className="text-sm font-semibold">Nova tarefa</p>
         </div>
 
-        <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
-          <label className="grid gap-1.5 text-sm font-medium">
+        <form className="mt-3 grid gap-2.5" onSubmit={handleCreateTask}>
+          <label className="grid gap-1 text-sm font-medium">
             Título
             <Input
               value={form.title}
@@ -542,16 +556,16 @@ export function KanbanBoard({ token }: { token: string }) {
             />
           </label>
 
-          <label className="grid gap-1.5 text-sm font-medium">
+          <label className="grid gap-1 text-sm font-medium">
             Descrição
             <Textarea
               value={form.description}
               onChange={(event) => updateForm("description", event.target.value)}
-              rows={4}
+              rows={3}
             />
           </label>
 
-          <label className="grid gap-1.5 text-sm font-medium">
+          <label className="grid gap-1 text-sm font-medium">
             Responsável
             <select
               className="h-8 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-zinc-500"
@@ -568,7 +582,7 @@ export function KanbanBoard({ token }: { token: string }) {
             </select>
           </label>
 
-          <label className="grid gap-1.5 text-sm font-medium">
+          <label className="grid gap-1 text-sm font-medium">
             Prioridade
             <select
               className="h-8 rounded-lg border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-zinc-500"
@@ -583,7 +597,7 @@ export function KanbanBoard({ token }: { token: string }) {
             </select>
           </label>
 
-          <label className="grid gap-1.5 text-sm font-medium">
+          <label className="grid gap-1 text-sm font-medium">
             Data de entrega
             <Input
               type="date"
@@ -593,9 +607,9 @@ export function KanbanBoard({ token }: { token: string }) {
           </label>
 
           {tags.length ? (
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <p className="text-sm font-medium">Tags</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {tags.map((tag) => (
                   <button
                     key={tag.id}
@@ -614,7 +628,7 @@ export function KanbanBoard({ token }: { token: string }) {
             </div>
           ) : null}
 
-          <Button className="h-10" disabled={isSaving || !users.length}>
+          <Button className="h-9" disabled={isSaving || !users.length}>
             {isSaving ? <Loader2 className="animate-spin" /> : <Plus />}
             Criar tarefa
           </Button>
@@ -627,12 +641,12 @@ export function KanbanBoard({ token }: { token: string }) {
           ) : null}
         </form>
 
-        <div className="mt-6 border-t border-zinc-200 pt-5">
+        <div className="mt-4 border-t border-zinc-200 pt-4">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold">Tags</p>
           </div>
 
-          <form className="mt-3 flex gap-2" onSubmit={handleCreateTag}>
+          <form className="mt-2 flex gap-2" onSubmit={handleCreateTag}>
             <Input
               value={tagName}
               onChange={(event) => setTagName(event.target.value)}
@@ -648,7 +662,7 @@ export function KanbanBoard({ token }: { token: string }) {
           </form>
 
           {tags.length ? (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {tags.map((tag) => (
                 <span
                   key={tag.id}
@@ -672,7 +686,9 @@ export function KanbanBoard({ token }: { token: string }) {
             </p>
           )}
         </div>
-      </aside>
+          </aside>
+        </div>
+      )}
 
       <Dialog
         open={!!editingTask}
@@ -867,7 +883,7 @@ export function KanbanBoard({ token }: { token: string }) {
               <Button
                 type="button"
                 variant="destructive"
-                onClick={() => void handleDeleteTask()}
+                onClick={() => editingTask && setTaskToDelete(editingTask)}
                 disabled={isUpdating}
               >
                 <Trash2 />
@@ -879,6 +895,54 @@ export function KanbanBoard({ token }: { token: string }) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!taskToDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTaskToDelete(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir tarefa</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir este card? Essa ação não poderá ser
+              desfeita.
+            </DialogDescription>
+          </DialogHeader>
+
+          {taskToDelete ? (
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-sm font-semibold">{taskToDelete.title}</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {statusLabels[taskToDelete.status]}
+              </p>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTaskToDelete(null)}
+              disabled={isUpdating}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => taskToDelete && void handleDeleteTask(taskToDelete)}
+              disabled={isUpdating}
+            >
+              {isUpdating ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Excluir
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </section>
@@ -903,7 +967,7 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-72 flex-col rounded-lg border p-3 transition-colors ${
+      className={`flex min-h-full flex-col rounded-lg border p-3 transition-colors ${
         isOver
           ? "border-zinc-500 bg-zinc-100"
           : "border-zinc-200 bg-zinc-50"
@@ -934,6 +998,234 @@ function KanbanColumn({
   );
 }
 
+function KanbanAnalytics({
+  isLoading,
+  tasks,
+  users,
+}: {
+  isLoading: boolean;
+  tasks: Task[];
+  users: User[];
+}) {
+  const analytics = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    const total = tasks.length;
+    const completed = tasks.filter((task) => task.status === "DONE").length;
+    const inProgress = tasks.filter(
+      (task) => task.status === "IN_PROGRESS" || task.status === "REVIEW"
+    ).length;
+    const overdue = tasks.filter((task) => {
+      if (!task.dueDate || task.status === "DONE") {
+        return false;
+      }
+
+      const dueDate = new Date(task.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+
+      return dueDate < today;
+    }).length;
+    const dueSoon = tasks.filter((task) => {
+      if (!task.dueDate || task.status === "DONE") {
+        return false;
+      }
+
+      const dueDate = new Date(task.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+
+      return dueDate >= today && dueDate <= nextWeek;
+    }).length;
+    const completionRate = total ? Math.round((completed / total) * 100) : 0;
+
+    const statusRows = columns.map((column) => ({
+      label: column.label,
+      value: tasks.filter((task) => task.status === column.status).length,
+    }));
+
+    const priorityRows = priorities.map((priority) => ({
+      label: priorityLabels[priority],
+      value: tasks.filter((task) => task.priority === priority).length,
+    }));
+
+    const responsibleRows = users
+      .map((user) => ({
+        label: user.name,
+        value: tasks.filter((task) => task.responsible?.id === user.id).length,
+      }))
+      .filter((row) => row.value > 0)
+      .sort((first, second) => second.value - first.value);
+
+    const unassignedCount = tasks.filter((task) => !task.responsible).length;
+
+    if (unassignedCount) {
+      responsibleRows.push({
+        label: "Sem responsável",
+        value: unassignedCount,
+      });
+    }
+
+    return {
+      total,
+      completed,
+      completionRate,
+      inProgress,
+      overdue,
+      dueSoon,
+      statusRows,
+      priorityRows,
+      responsibleRows,
+    };
+  }, [tasks, users]);
+
+  return (
+    <section className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-normal">
+            Dados analíticos
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
+            Acompanhe distribuição, prazos e progresso das tarefas do quadro.
+          </p>
+        </div>
+        <Badge variant="secondary">
+          {analytics.total} tarefas · {analytics.completionRate}% concluídas
+        </Badge>
+      </div>
+
+      {isLoading ? (
+        <div className="flex min-h-72 items-center justify-center">
+          <Loader2 className="size-6 animate-spin text-zinc-500" />
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <AnalyticsMetric
+              icon={ListChecks}
+              label="Total de tarefas"
+              value={analytics.total}
+              detail={`${analytics.inProgress} em andamento/revisão`}
+            />
+            <AnalyticsMetric
+              icon={CheckCircle2}
+              label="Concluídas"
+              value={`${analytics.completionRate}%`}
+              detail={`${analytics.completed} tarefas finalizadas`}
+            />
+            <AnalyticsMetric
+              icon={Clock3}
+              label="Próximas do prazo"
+              value={analytics.dueSoon}
+              detail="Vencem em até 7 dias"
+            />
+            <AnalyticsMetric
+              icon={TriangleAlert}
+              label="Atrasadas"
+              value={analytics.overdue}
+              detail="Pendentes com prazo vencido"
+            />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <AnalyticsDistribution
+              title="Por status"
+              rows={analytics.statusRows}
+            />
+            <AnalyticsDistribution
+              title="Por prioridade"
+              rows={analytics.priorityRows}
+            />
+            <AnalyticsDistribution
+              title="Por responsável"
+              emptyLabel="Nenhuma tarefa atribuída"
+              rows={analytics.responsibleRows}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AnalyticsMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: typeof BarChart3;
+  label: string;
+  value: number | string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase text-zinc-500">{label}</p>
+        <Icon className="size-4 text-zinc-500" />
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-normal text-zinc-950">
+        {value}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">{detail}</p>
+    </div>
+  );
+}
+
+function AnalyticsDistribution({
+  title,
+  rows,
+  emptyLabel = "Nenhum dado disponível",
+}: {
+  title: string;
+  rows: Array<{ label: string; value: number }>;
+  emptyLabel?: string;
+}) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">{title}</p>
+        <BarChart3 className="size-4 text-zinc-400" />
+      </div>
+
+      {total ? (
+        <div className="grid gap-3">
+          {rows.map((row) => {
+            const percentage = Math.round((row.value / total) * 100);
+
+            return (
+              <div key={row.label} className="grid gap-1.5">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium text-zinc-700">
+                    {row.label}
+                  </span>
+                  <span className="shrink-0 text-zinc-500">
+                    {row.value} · {percentage}%
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className="h-full rounded-full bg-zinc-900"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm leading-6 text-zinc-500">{emptyLabel}</p>
+      )}
+    </div>
+  );
+}
+
 function KanbanTaskCard({
   task,
   onEditTask,
@@ -958,15 +1250,17 @@ function KanbanTaskCard({
       }}
       className={`rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition-shadow ${
         isDragging ? "z-10 opacity-80 shadow-lg" : ""
-      }`}
+      } flex h-52 flex-col`}
       onDoubleClick={() => onEditTask(task)}
       {...listeners}
       {...attributes}
     >
-      <div className="cursor-grab active:cursor-grabbing">
+      <div className="min-h-0 flex-1 cursor-grab overflow-hidden active:cursor-grabbing">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold leading-5">{task.title}</h2>
+            <h2 className="truncate text-sm font-semibold leading-5">
+              {task.title}
+            </h2>
             <p className="mt-1 text-xs text-zinc-500">
               {statusLabels[task.status]}
             </p>
@@ -979,7 +1273,7 @@ function KanbanTaskCard({
         </div>
 
         {task.tags?.length ? (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-2 flex max-h-10 flex-wrap gap-1 overflow-hidden">
             {task.tags.map((tag) => (
               <Badge key={tag.id} variant="outline">
                 {tag.name}
@@ -988,24 +1282,28 @@ function KanbanTaskCard({
           </div>
         ) : null}
 
-        <div className="mt-3 grid gap-2 text-xs text-zinc-500">
+        <div className="mt-3 grid gap-2 overflow-hidden text-xs text-zinc-500">
           {task.responsible ? (
-            <span className="flex items-center gap-1.5">
+            <span className="flex min-w-0 items-center gap-1.5">
               <UserRound className="size-3.5" />
-              {task.responsible.name}
+              <span className="truncate">{task.responsible.name}</span>
             </span>
           ) : null}
           {task.dueDate ? (
-            <span className="flex items-center gap-1.5">
+            <span className="flex min-w-0 items-center gap-1.5">
               <CalendarDays className="size-3.5" />
-              {new Intl.DateTimeFormat("pt-BR").format(new Date(task.dueDate))}
+              <span className="truncate">
+                {new Intl.DateTimeFormat("pt-BR").format(
+                  new Date(task.dueDate)
+                )}
+              </span>
             </span>
           ) : null}
         </div>
 
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-1">
+      <div className="mt-3 grid shrink-0 grid-cols-2 gap-1">
         <Button
           type="button"
           variant="outline"

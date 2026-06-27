@@ -1,8 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ClipboardList, Loader2, Lock, LogOut, UserPlus } from "lucide-react";
-import { KanbanBoard } from "@/features/kanban/kanban-board";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  BarChart3,
+  ClipboardList,
+  ListChecks,
+  Loader2,
+  Lock,
+  LogOut,
+  UserPlus,
+} from "lucide-react";
+import { KanbanBoard, type BoardView } from "@/features/kanban/kanban-board";
 import { login, getMe, register } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import type { User } from "@/lib/api/types";
@@ -42,6 +55,7 @@ export function AuthScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [isBooting, setIsBooting] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeView, setActiveView] = useState<BoardView>("board");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -132,6 +146,7 @@ export function AuthScreen() {
     window.localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
+    setActiveView("board");
   }
 
   if (isBooting) {
@@ -146,24 +161,55 @@ export function AuthScreen() {
     return (
       <main className="min-h-screen bg-zinc-100 text-zinc-950">
         <header className="border-b border-zinc-200 bg-white">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-4">
             <div className="flex items-center gap-3">
               <div className="flex size-9 items-center justify-center rounded-lg bg-zinc-950 text-white">
                 <ClipboardList className="size-5" />
               </div>
               <div>
                 <p className="text-sm font-semibold leading-none">TaskFlow</p>
-                <p className="mt-1 text-xs text-zinc-500">{user.email}</p>
+                <p className="mt-1 text-xs text-zinc-500">{user.name}</p>
               </div>
             </div>
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut />
-              Sair
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-1">
+                <button
+                  type="button"
+                  className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-3 text-sm font-medium ${
+                    activeView === "board"
+                      ? "bg-zinc-950 text-white"
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+                  }`}
+                  onClick={() => setActiveView("board")}
+                >
+                  <ListChecks className="size-4" />
+                  Quadro
+                </button>
+                <button
+                  type="button"
+                  className={`flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-3 text-sm font-medium ${
+                    activeView === "analytics"
+                      ? "bg-zinc-950 text-white"
+                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
+                  }`}
+                  onClick={() => setActiveView("analytics")}
+                >
+                  <BarChart3 className="size-4" />
+                  Dados
+                </button>
+              </div>
+              <Button variant="outline" onClick={handleLogout}>
+                <LogOut />
+                Sair
+              </Button>
+            </div>
           </div>
         </header>
 
-        <KanbanBoard token={token} />
+        <KanbanBoard
+          token={token}
+          activeView={activeView}
+        />
       </main>
     );
   }
