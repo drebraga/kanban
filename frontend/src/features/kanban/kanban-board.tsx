@@ -283,11 +283,21 @@ export function KanbanBoard({
       return;
     }
 
+    if (!form.description.trim()) {
+      setError("Informe a descrição para criar a tarefa.");
+      return;
+    }
+
+    if (!form.dueDate) {
+      setError("Informe a data de entrega para criar a tarefa.");
+      return;
+    }
+
     const payload: CreateTaskPayload = {
       title: form.title,
-      description: form.description || undefined,
+      description: form.description,
       priority: form.priority,
-      dueDate: form.dueDate || undefined,
+      dueDate: form.dueDate,
       responsibleId: Number(form.responsibleId),
       tagIds: form.tagIds.map(Number),
       attachments: form.attachments,
@@ -352,14 +362,23 @@ export function KanbanBoard({
       return;
     }
 
+    if (!editForm.description.trim() && !editingTask.description) {
+      setError("Informe a descrição para atualizar a tarefa.");
+      return;
+    }
+
+    if (!editForm.dueDate && !editingTask.dueDate) {
+      setError("Informe a data de entrega para atualizar a tarefa.");
+      return;
+    }
+
     setIsUpdating(true);
     setError(null);
 
     try {
       const updatedTask = await updateTask(token, editingTask.id, {
         title: editForm.title || editingTask.title,
-        description:
-          editForm.description || editingTask.description || undefined,
+        description: editForm.description || editingTask.description || "",
         status: editingTask.status,
         priority: editForm.priority || editingTask.priority,
         dueDate:
@@ -577,6 +596,7 @@ export function KanbanBoard({
               value={form.description}
               onChange={(event) => updateForm("description", event.target.value)}
               rows={3}
+              required
             />
           </label>
 
@@ -618,6 +638,7 @@ export function KanbanBoard({
               type="date"
               value={form.dueDate}
               onChange={(event) => updateForm("dueDate", event.target.value)}
+              required
             />
           </label>
 
@@ -758,6 +779,7 @@ export function KanbanBoard({
                   updateEditForm("description", event.target.value)
                 }
                 rows={4}
+                required
               />
             </label>
 
@@ -833,6 +855,7 @@ export function KanbanBoard({
                   onChange={(event) =>
                     updateEditForm("dueDate", event.target.value)
                   }
+                  required
                 />
               </label>
             </div>

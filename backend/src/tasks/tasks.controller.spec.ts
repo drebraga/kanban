@@ -35,7 +35,9 @@ describe('TasksController', () => {
   it('should create a task', async () => {
     const dto = {
       title: 'Implementar Kanban',
+      description: 'Criar quadro com drag and drop',
       priority: 'MEDIUM' as never,
+      dueDate: '2026-06-30',
       responsibleId: 1,
     };
 

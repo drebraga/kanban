@@ -37,16 +37,15 @@ export class CreateTaskDto {
   @IsNotEmpty()
   title!: string;
 
-  @IsOptional()
   @IsString()
-  description?: string;
+  @IsNotEmpty()
+  description!: string;
 
   @IsEnum(TaskPriority)
   priority!: TaskPriority;
 
-  @IsOptional()
   @IsDateString()
-  dueDate?: string;
+  dueDate!: string;
 
   @Type(() => Number)
   @IsInt()

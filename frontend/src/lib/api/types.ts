@@ -59,9 +59,9 @@ export type TaskHistory = {
 
 export type CreateTaskPayload = {
   title: string;
-  description?: string;
+  description: string;
   priority: TaskPriority;
-  dueDate?: string;
+  dueDate: string;
   responsibleId: number;
   tagIds?: number[];
   attachments?: File[];

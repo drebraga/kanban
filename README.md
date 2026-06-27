@@ -27,7 +27,7 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 - Histórico de movimentação por tarefa.
 - Responsável por tarefa.
 - Prioridade por tarefa.
-- Data de entrega.
+- Título, descrição, responsável, prioridade e data de entrega obrigatórios.
 - Tags/etiquetas editáveis.
 - Upload opcional de anexos ao criar ou editar tarefas.
 - Cards com tamanho fixo.
@@ -36,6 +36,25 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 - Filtro por período e fluxo de conclusão ao longo do tempo.
 - Fila assíncrona para e-mails com worker separado.
 - Envio real de e-mail via SMTP na criação, alteração de status e prazo próximo agendado.
+
+## Atendimento ao Case
+
+| Requisito | Status | Observação |
+| --- | --- | --- |
+| Login e cadastro de usuários | Feito | Cadastro redireciona para login com feedback de sucesso |
+| Autenticação JWT | Feito | Rotas privadas protegidas no backend e sessão usada no frontend |
+| Validação de formulários | Feito | Validação no frontend e DTOs com `class-validator` no backend |
+| Hash de senha | Feito | Senhas armazenadas com `bcrypt` |
+| Kanban com quatro colunas | Feito | A Fazer, Em Andamento, Em Revisão e Concluído |
+| Drag and drop de cards | Feito | Mudança de status por arrastar |
+| CRUD de cards | Feito | Criação, edição, exclusão e confirmação antes de excluir |
+| Modal de edição | Feito | Título, descrição, responsável, prioridade, data, status, tags, anexos e histórico |
+| Histórico de movimentações | Feito | Registrado quando o status muda |
+| Upload de anexos | Feito | Opcional, com até 5 arquivos por envio |
+| Dashboard analítico | Feito | Métricas por status, responsável, atraso, prazo próximo, prioridade e fluxo de conclusão |
+| Filtro por período | Feito | Disponível na tela de dados analíticos |
+| Fila de e-mail | Feito | Redis + BullMQ + worker separado |
+| Notificações por e-mail | Feito | Criação/atribuição, alteração de status e prazo próximo |
 
 ## Como Rodar Com Docker
 
@@ -554,6 +573,31 @@ Criar tag:
 }
 ```
 
+### Upload de Anexos
+
+Para criar ou editar tarefa com anexos, envie a requisição como `multipart/form-data`.
+
+Campos:
+
+```text
+title=Implementar dashboard
+description=Criar visão analítica do quadro
+priority=MEDIUM
+dueDate=2026-06-30
+responsibleId=1
+tagIds=[1,2]
+attachments=<arquivo>
+attachments=<arquivo>
+```
+
+Regras:
+
+- `attachments` é opcional.
+- Máximo de 5 arquivos por envio.
+- Tamanho máximo de 5 MB por arquivo.
+- Arquivos ficam em `backend/uploads/tasks`.
+- Metadados dos anexos ficam salvos na própria tarefa.
+
 ## Arquitetura
 
 ```text
@@ -597,14 +641,26 @@ Criar tag:
 ## Decisões Técnicas
 
 - **JWT:** usado para proteger rotas privadas de tarefas, tags e usuários.
-- **TypeORM com `synchronize`:** mantido para facilitar execução local do case.
-- **Docker Compose:** concentra Postgres, Redis, backend, worker de e-mail e frontend.
+- **TypeORM com `synchronize`:** mantido para facilitar a execução do case sem etapa manual de migrations. Em produção, o ideal seria usar migrations versionadas.
+- **Docker Compose:** concentra Postgres, Redis, backend, worker de e-mail e frontend. Essa foi a forma recomendada para reduzir incompatibilidades de Node.js, banco, Redis e rede local.
 - **Volumes de `node_modules`:** evitam sobrescrever dependências instaladas dentro dos containers.
 - **BullMQ/Redis:** e-mails rodam fora do fluxo principal da requisição e são processados pelo `mail-worker`.
 - **Nodemailer:** permite envio SMTP real sem depender de serviço proprietário.
-- **Drag and drop:** feito com `dnd-kit`, mantendo mudança de status apenas por arrastar.
-- **Dashboard no frontend:** métricas derivadas dos dados já carregados do quadro, com filtro de período e fluxo de conclusão sem endpoint extra para o escopo atual.
+- **Drag and drop:** feito com `dnd-kit`, mantendo mudança de status apenas por arrastar. Ordenação manual dentro da coluna ficou fora do escopo final.
+- **Dashboard no frontend:** métricas derivadas dos dados já carregados do quadro, com filtro de período e fluxo de conclusão sem endpoint extra para o escopo atual. Para bases maiores, agregações no backend seriam mais adequadas.
 - **Histórico:** registrado somente quando há mudança real de status.
+- **Upload local em disco:** simplifica a execução do case e funciona bem em ambiente local. Em produção, o ideal seria usar storage externo, como S3 ou equivalente.
+- **Anexos servidos por `/uploads`:** facilita o teste local. Em produção, os downloads deveriam passar por rota autenticada.
+- **Worker separado:** o processamento de e-mails fica isolado da API HTTP, evitando que envio SMTP bloqueie a resposta ao usuário.
+
+## Limitações e Melhorias Futuras
+
+- Ordenação manual dos cards dentro da coluna ainda não foi implementada; hoje a ordenação vem da API.
+- Upload usa armazenamento local em disco; em produção, usar storage externo.
+- Anexos são servidos por URL pública local; em produção, proteger download com autenticação.
+- O projeto usa `synchronize` do TypeORM para simplificar o case; em produção, substituir por migrations.
+- Testes automatizados cobrem backend e serviços principais, mas ainda não há teste E2E completo do fluxo visual no navegador.
+- Dashboard é calculado no frontend; para grande volume de dados, criar endpoints analíticos agregados no backend.
 
 ## Testes e Build
 
@@ -651,23 +707,9 @@ Volumes:
 - `backend_node_modules`: dependências do backend dentro do container.
 - `frontend_node_modules`: dependências do frontend dentro do container.
 
-Se instalar novas dependências e o container não reconhecer, atualize o volume:
-
-```bash
-docker compose exec -u root backend npm ci
-docker compose exec -u root backend chown -R node:node /app/node_modules
-docker compose restart backend
-```
-
-Para frontend, o mesmo raciocínio:
-
-```bash
-docker compose exec -u root frontend npm ci
-docker compose exec -u root frontend chown -R node:node /app/node_modules
-docker compose restart frontend
-```
-
 ## Segurança
 
 - Usar senha de app para SMTP.
 - Não expor credenciais de e-mail no repositório.
+- Não usar `JWT_SECRET` padrão em ambiente real.
+- Proteger download de anexos em produção.

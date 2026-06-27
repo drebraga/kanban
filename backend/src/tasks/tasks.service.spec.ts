@@ -91,7 +91,9 @@ describe('TasksService', () => {
     await expect(
       service.create({
         title: 'Implementar Kanban',
+        description: 'Criar quadro com drag and drop',
         priority: TaskPriority.MEDIUM,
+        dueDate: '2026-06-30',
         responsibleId: 1,
         tagIds: [1],
       }),
@@ -99,9 +101,9 @@ describe('TasksService', () => {
 
     expect(tasksRepository.create).toHaveBeenCalledWith({
       title: 'Implementar Kanban',
-      description: undefined,
+      description: 'Criar quadro com drag and drop',
       priority: TaskPriority.MEDIUM,
-      dueDate: undefined,
+      dueDate: new Date('2026-06-30'),
       responsible,
       tags,
       attachments: [],
