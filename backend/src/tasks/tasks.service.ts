@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Task } from './entities/tasks.entity';
 import { In, Repository } from 'typeorm';
@@ -16,6 +16,8 @@ import { UploadedTaskFile } from './types/uploaded-task-file.type';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectRepository(Task)
     private readonly tasksRepository: Repository<Task>,
@@ -45,12 +47,14 @@ export class TasksService {
 
       const savedTask = await this.tasksRepository.save(task);
 
-      await this.mailQueueService.enqueueTaskCreatedEmail({
-        taskId: savedTask.id,
-        taskTitle: savedTask.title,
-        responsibleName: responsible.name,
-        responsibleEmail: responsible.email,
-      });
+      await this.runMailQueueOperation(() =>
+        this.mailQueueService.enqueueTaskCreatedEmail({
+          taskId: savedTask.id,
+          taskTitle: savedTask.title,
+          responsibleName: responsible.name,
+          responsibleEmail: responsible.email,
+        }),
+      );
 
       await this.scheduleDueSoonEmail(savedTask);
 
@@ -148,34 +152,40 @@ export class TasksService {
       const savedTask = await this.tasksRepository.save(task);
 
       if (dto.status !== undefined && dto.status !== previousStatus) {
+        const newStatus = dto.status;
+
         await this.historyRepository.save(
           this.historyRepository.create({
             task: savedTask,
             oldStatus: previousStatus,
-            newStatus: dto.status,
+            newStatus,
           }),
         );
 
-        await this.mailQueueService.enqueueTaskStatusChangedEmail({
-          taskId: savedTask.id,
-          taskTitle: savedTask.title,
-          responsibleName: savedTask.responsible.name,
-          responsibleEmail: savedTask.responsible.email,
-          oldStatus: previousStatus,
-          newStatus: dto.status,
-        });
+        await this.runMailQueueOperation(() =>
+          this.mailQueueService.enqueueTaskStatusChangedEmail({
+            taskId: savedTask.id,
+            taskTitle: savedTask.title,
+            responsibleName: savedTask.responsible.name,
+            responsibleEmail: savedTask.responsible.email,
+            oldStatus: previousStatus,
+            newStatus,
+          }),
+        );
       }
 
       if (
         dto.responsibleId !== undefined &&
         savedTask.responsible.id !== previousResponsibleId
       ) {
-        await this.mailQueueService.enqueueTaskCreatedEmail({
-          taskId: savedTask.id,
-          taskTitle: savedTask.title,
-          responsibleName: savedTask.responsible.name,
-          responsibleEmail: savedTask.responsible.email,
-        });
+        await this.runMailQueueOperation(() =>
+          this.mailQueueService.enqueueTaskCreatedEmail({
+            taskId: savedTask.id,
+            taskTitle: savedTask.title,
+            responsibleName: savedTask.responsible.name,
+            responsibleEmail: savedTask.responsible.email,
+          }),
+        );
       }
 
       if (
@@ -195,7 +205,9 @@ export class TasksService {
 
   async remove(id: number) {
     const task = await this.findOne(id);
-    await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
+    await this.runMailQueueOperation(() =>
+      this.mailQueueService.cancelTaskDueSoonEmail(task.id),
+    );
     await this.tasksRepository.remove(task);
     await this.deleteExistingAttachments(task.attachments ?? []);
 
@@ -261,26 +273,43 @@ export class TasksService {
 
   private async scheduleDueSoonEmail(task: Task) {
     if (!task.dueDate || task.status === TaskStatus.DONE) {
-      await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
+      await this.runMailQueueOperation(() =>
+        this.mailQueueService.cancelTaskDueSoonEmail(task.id),
+      );
       return;
     }
 
     const dueDate = new Date(task.dueDate);
 
     if (dueDate < new Date()) {
-      await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
+      await this.runMailQueueOperation(() =>
+        this.mailQueueService.cancelTaskDueSoonEmail(task.id),
+      );
       return;
     }
 
-    await this.mailQueueService.scheduleTaskDueSoonEmail(
-      {
-        taskId: task.id,
-        taskTitle: task.title,
-        responsibleName: task.responsible.name,
-        responsibleEmail: task.responsible.email,
-        dueDate: task.dueDate.toISOString(),
-      },
-      dueDate,
+    await this.runMailQueueOperation(() =>
+      this.mailQueueService.scheduleTaskDueSoonEmail(
+        {
+          taskId: task.id,
+          taskTitle: task.title,
+          responsibleName: task.responsible.name,
+          responsibleEmail: task.responsible.email,
+          dueDate: task.dueDate.toISOString(),
+        },
+        dueDate,
+      ),
     );
+  }
+
+  private async runMailQueueOperation(operation: () => Promise<unknown>) {
+    try {
+      await operation();
+    } catch (error) {
+      this.logger.error(
+        'Falha ao executar operação de e-mail assíncrono.',
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
   }
 }

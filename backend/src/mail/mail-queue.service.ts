@@ -127,7 +127,7 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   private createDueSoonJobId(taskId: number) {
-    return `${TASK_DUE_SOON_MAIL_JOB}:${taskId}`;
+    return `${TASK_DUE_SOON_MAIL_JOB}-${taskId}`;
   }
 
   private async processMailJob(job: Job<TaskMailJob>) {
