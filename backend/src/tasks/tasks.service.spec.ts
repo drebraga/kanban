@@ -104,6 +104,7 @@ describe('TasksService', () => {
       dueDate: undefined,
       responsible,
       tags,
+      attachments: [],
     });
     expect(mailQueueService.enqueueTaskCreatedEmail).toHaveBeenCalledWith({
       taskId: 1,

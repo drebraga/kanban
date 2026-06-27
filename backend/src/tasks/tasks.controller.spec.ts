@@ -41,7 +41,7 @@ describe('TasksController', () => {
 
     await controller.create(dto);
 
-    expect(tasksService.create).toHaveBeenCalledWith(dto);
+    expect(tasksService.create).toHaveBeenCalledWith(dto, []);
   });
 
   it('should update a task', async () => {
@@ -51,7 +51,7 @@ describe('TasksController', () => {
 
     await controller.update(1, dto);
 
-    expect(tasksService.update).toHaveBeenCalledWith(1, dto);
+    expect(tasksService.update).toHaveBeenCalledWith(1, dto, []);
   });
 
   it('should list a task history', async () => {

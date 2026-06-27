@@ -29,6 +29,7 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 - Prioridade por tarefa.
 - Data de entrega.
 - Tags/etiquetas editáveis.
+- Upload opcional de anexos ao criar ou editar tarefas.
 - Cards com tamanho fixo.
 - Dashboard analítico separado do quadro.
 - Métricas por status, prioridade, responsável, tarefas atrasadas e próximas do prazo.
@@ -484,6 +485,12 @@ Serviços:
 - `backend`: NestJS em modo watch.
 - `mail-worker`: consumidor BullMQ para envio assíncrono de e-mails.
 - `frontend`: Next.js em modo dev com webpack.
+
+Uploads:
+
+- Arquivos enviados em tarefas ficam em `backend/uploads/tasks`.
+- Os metadados dos anexos ficam salvos na própria tarefa.
+- A pasta `backend/uploads/` é ignorada pelo Git.
 
 Volumes:
 

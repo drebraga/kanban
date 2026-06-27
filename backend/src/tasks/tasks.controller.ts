@@ -20,9 +20,11 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { CreateTaskDto } from './dto/tasks.dto';
 import { UpdateTaskDto } from './dto/tasks-update.dto';
 import { TasksService } from './tasks.service';
+import { UploadedTaskFile } from './types/uploaded-task-file.type';
 
 const uploadDir = join(process.cwd(), 'uploads', 'tasks');
 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 const taskFilesInterceptor = FilesInterceptor('attachments', 5, {
   storage: diskStorage({
     destination: (_request, _file, callback) => {
@@ -32,7 +34,7 @@ const taskFilesInterceptor = FilesInterceptor('attachments', 5, {
 
       callback(null, uploadDir);
     },
-    filename: (_request, file, callback) => {
+    filename: (_request, file: UploadedTaskFile, callback) => {
       callback(null, `${randomUUID()}${extname(file.originalname)}`);
     },
   }),
@@ -40,6 +42,7 @@ const taskFilesInterceptor = FilesInterceptor('attachments', 5, {
     fileSize: 5 * 1024 * 1024,
   },
 });
+/* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
@@ -50,7 +53,7 @@ export class TasksController {
   @UseInterceptors(taskFilesInterceptor)
   create(
     @Body() dto: CreateTaskDto,
-    @UploadedFiles() files: Express.Multer.File[] = [],
+    @UploadedFiles() files: UploadedTaskFile[] = [],
   ) {
     return this.tasksService.create(dto, files);
   }
@@ -75,7 +78,7 @@ export class TasksController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateTaskDto,
-    @UploadedFiles() files: Express.Multer.File[] = [],
+    @UploadedFiles() files: UploadedTaskFile[] = [],
   ) {
     return this.tasksService.update(id, dto, files);
   }

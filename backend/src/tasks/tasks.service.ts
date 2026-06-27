@@ -9,6 +9,8 @@ import { Tag } from 'src/tags/entities/tags.entity';
 import { TaskHistory } from 'src/task-history/entities/task-history.entity';
 import { MailQueueService } from 'src/mail/mail-queue.service';
 import { TaskStatus } from 'src/enums/task-status.enum';
+import { TaskAttachment } from './types/task-attachment.type';
+import { UploadedTaskFile } from './types/uploaded-task-file.type';
 
 @Injectable()
 export class TasksService {
@@ -24,7 +26,7 @@ export class TasksService {
     private readonly mailQueueService: MailQueueService,
   ) {}
 
-  async create(dto: CreateTaskDto) {
+  async create(dto: CreateTaskDto, files: UploadedTaskFile[] = []) {
     const responsible = await this.findResponsible(dto.responsibleId);
     const tags = await this.findTags(dto.tagIds);
 
@@ -35,6 +37,7 @@ export class TasksService {
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       responsible,
       tags,
+      attachments: this.mapAttachments(files),
     });
 
     const savedTask = await this.tasksRepository.save(task);
@@ -94,7 +97,7 @@ export class TasksService {
     });
   }
 
-  async update(id: number, dto: UpdateTaskDto) {
+  async update(id: number, dto: UpdateTaskDto, files: UploadedTaskFile[] = []) {
     const task = await this.findOne(id);
     const previousStatus = task.status;
     const previousResponsibleId = task.responsible?.id;
@@ -125,6 +128,13 @@ export class TasksService {
 
     if (dto.dueDate !== undefined) {
       task.dueDate = new Date(dto.dueDate);
+    }
+
+    if (files.length) {
+      task.attachments = [
+        ...(task.attachments ?? []),
+        ...this.mapAttachments(files),
+      ];
     }
 
     const savedTask = await this.tasksRepository.save(task);
@@ -208,6 +218,16 @@ export class TasksService {
     }
 
     return tags;
+  }
+
+  private mapAttachments(files: UploadedTaskFile[]): TaskAttachment[] {
+    return files.map((file) => ({
+      originalName: file.originalname,
+      fileName: file.filename,
+      mimeType: file.mimetype,
+      size: file.size,
+      url: `/uploads/tasks/${file.filename}`,
+    }));
   }
 
   private async scheduleDueSoonEmail(task: Task) {

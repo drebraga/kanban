@@ -25,6 +25,7 @@ import {
   Clock3,
   ListChecks,
   Loader2,
+  Paperclip,
   Pencil,
   Plus,
   Trash2,
@@ -89,6 +90,7 @@ type TaskForm = {
   dueDate: string;
   responsibleId: string;
   tagIds: string[];
+  attachments: File[];
 };
 
 export type BoardView = "board" | "analytics";
@@ -100,6 +102,7 @@ const initialTaskForm: TaskForm = {
   dueDate: "",
   responsibleId: "",
   tagIds: [],
+  attachments: [],
 };
 
 const statusByDroppableId = columns.reduce<Record<string, TaskStatus>>(
@@ -253,6 +256,7 @@ export function KanbanBoard({
       dueDate: task.dueDate ? task.dueDate.slice(0, 10) : "",
       responsibleId: task.responsible ? String(task.responsible.id) : "",
       tagIds: task.tags?.map((tag) => String(tag.id)) ?? [],
+      attachments: [],
     });
 
     setIsHistoryLoading(true);
@@ -286,6 +290,7 @@ export function KanbanBoard({
       dueDate: form.dueDate || undefined,
       responsibleId: Number(form.responsibleId),
       tagIds: form.tagIds.map(Number),
+      attachments: form.attachments,
     };
 
     setIsSaving(true);
@@ -364,6 +369,7 @@ export function KanbanBoard({
           editForm.responsibleId || editingTask.responsible?.id
         ),
         tagIds: editForm.tagIds.map(Number),
+        attachments: editForm.attachments,
       });
 
       setTasks((current) =>
@@ -615,6 +621,24 @@ export function KanbanBoard({
             />
           </label>
 
+          <label className="grid gap-1 text-sm font-medium">
+            Anexos
+            <Input
+              type="file"
+              multiple
+              onChange={(event) =>
+                updateForm(
+                  "attachments",
+                  Array.from(event.target.files ?? [])
+                )
+              }
+            />
+          </label>
+
+          {form.attachments.length ? (
+            <AttachmentSelection files={form.attachments} />
+          ) : null}
+
           {tags.length ? (
             <div className="grid gap-1.5">
               <p className="text-sm font-medium">Tags</p>
@@ -811,6 +835,48 @@ export function KanbanBoard({
                   }
                 />
               </label>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="grid gap-1.5 text-sm font-medium">
+                Novos anexos
+                <Input
+                  type="file"
+                  multiple
+                  onChange={(event) =>
+                    updateEditForm(
+                      "attachments",
+                      Array.from(event.target.files ?? [])
+                    )
+                  }
+                />
+              </label>
+
+              {editForm.attachments.length ? (
+                <AttachmentSelection files={editForm.attachments} />
+              ) : null}
+
+              {editingTask?.attachments?.length ? (
+                <div className="grid gap-1.5">
+                  <p className="text-sm font-medium">Anexos atuais</p>
+                  <div className="grid gap-1.5">
+                    {editingTask.attachments.map((attachment) => (
+                      <a
+                        key={attachment.fileName}
+                        className="inline-flex min-w-0 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}${attachment.url}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Paperclip className="size-3.5 shrink-0" />
+                        <span className="truncate">
+                          {attachment.originalName}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -1228,6 +1294,22 @@ function KanbanAnalytics({
   );
 }
 
+function AttachmentSelection({ files }: { files: File[] }) {
+  return (
+    <div className="grid gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 p-2">
+      {files.map((file) => (
+        <div
+          key={`${file.name}-${file.size}`}
+          className="flex min-w-0 items-center gap-2 text-xs text-zinc-600"
+        >
+          <Paperclip className="size-3.5 shrink-0" />
+          <span className="truncate">{file.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AnalyticsMetric({
   icon: Icon,
   label,
@@ -1424,6 +1506,15 @@ function KanbanTaskCard({
                 {new Intl.DateTimeFormat("pt-BR").format(
                   new Date(task.dueDate)
                 )}
+              </span>
+            </span>
+          ) : null}
+          {task.attachments?.length ? (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Paperclip className="size-3.5" />
+              <span className="truncate">
+                {task.attachments.length} anexo
+                {task.attachments.length > 1 ? "s" : ""}
               </span>
             </span>
           ) : null}

@@ -28,6 +28,14 @@ export type Tag = {
   name: string;
 };
 
+export type TaskAttachment = {
+  originalName: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
 export type Task = {
   id: number;
   title: string;
@@ -37,6 +45,7 @@ export type Task = {
   dueDate?: string | null;
   responsible?: User | null;
   tags?: Tag[];
+  attachments?: TaskAttachment[];
   createdAt: string;
   updatedAt: string;
 };
@@ -55,6 +64,7 @@ export type CreateTaskPayload = {
   dueDate?: string;
   responsibleId: number;
   tagIds?: number[];
+  attachments?: File[];
 };
 
 export type UpdateTaskPayload = Partial<CreateTaskPayload> & {
