@@ -9,10 +9,12 @@ import { createTransport, Transporter } from 'nodemailer';
 import {
   MAIL_QUEUE_NAME,
   TASK_CREATED_MAIL_JOB,
+  TASK_DUE_SOON_MAIL_JOB,
   TASK_STATUS_CHANGED_MAIL_JOB,
 } from './mail-queue.constants';
 import {
   TaskCreatedMailJob,
+  TaskDueSoonMailJob,
   TaskMailJob,
   TaskStatusChangedMailJob,
 } from './types/task-mail-job.type';
@@ -58,6 +60,10 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
+    if (process.env.MAIL_WORKER_ENABLED === 'false') {
+      return;
+    }
+
     this.worker = new Worker<TaskMailJob>(
       MAIL_QUEUE_NAME,
       (job) => this.processMailJob(job),
@@ -91,6 +97,10 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
     await this.queue.add(TASK_STATUS_CHANGED_MAIL_JOB, payload);
   }
 
+  async enqueueTaskDueSoonEmail(payload: TaskDueSoonMailJob) {
+    await this.queue.add(TASK_DUE_SOON_MAIL_JOB, payload);
+  }
+
   private async processMailJob(job: Job<TaskMailJob>) {
     if (!this.transporter) {
       throw new Error(
@@ -107,6 +117,19 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
         subject: `Nova tarefa para você: ${data.taskTitle}`,
         text: this.buildTaskCreatedText(data),
         html: this.buildTaskCreatedHtml(data),
+      });
+      return;
+    }
+
+    if (job.name === TASK_DUE_SOON_MAIL_JOB) {
+      const data = job.data as TaskDueSoonMailJob;
+
+      await this.transporter.sendMail({
+        from: this.from,
+        to: data.responsibleEmail,
+        subject: `Prazo próximo no TaskFlow: ${data.taskTitle}`,
+        text: this.buildDueSoonText(data),
+        html: this.buildDueSoonHtml(data),
       });
       return;
     }
@@ -182,6 +205,18 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
     ].join('\n');
   }
 
+  private buildDueSoonText(data: TaskDueSoonMailJob) {
+    return [
+      `Olá, ${data.responsibleName}.`,
+      '',
+      `A tarefa "${data.taskTitle}" está com a data de entrega próxima.`,
+      '',
+      `Data de entrega: ${this.formatDate(data.dueDate)}`,
+      '',
+      'Acesse o quadro para revisar os detalhes e priorizar os próximos passos.',
+    ].join('\n');
+  }
+
   private buildTaskCreatedHtml(data: TaskCreatedMailJob) {
     return this.buildMailTemplate({
       eyebrow: 'Nova tarefa atribuída',
@@ -217,6 +252,27 @@ export class MailQueueService implements OnModuleInit, OnModuleDestroy {
         },
       ],
     });
+  }
+
+  private buildDueSoonHtml(data: TaskDueSoonMailJob) {
+    return this.buildMailTemplate({
+      eyebrow: 'Prazo próximo',
+      title: data.taskTitle,
+      greeting: `Olá, ${data.responsibleName}.`,
+      message:
+        'Esta tarefa está com a data de entrega próxima. Acesse o quadro para revisar os detalhes e priorizar os próximos passos.',
+      rows: [
+        {
+          label: 'Data de entrega',
+          value: this.formatDate(data.dueDate),
+          highlight: true,
+        },
+      ],
+    });
+  }
+
+  private formatDate(value: string) {
+    return new Intl.DateTimeFormat('pt-BR').format(new Date(value));
   }
 
   private buildMailTemplate({

@@ -125,6 +125,15 @@ const statusLabels = columns.reduce<Record<TaskStatus, string>>(
 
 const priorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 
+type AnalyticsPeriod = "ALL" | "7" | "30" | "90";
+
+const analyticsPeriods: Array<{ value: AnalyticsPeriod; label: string }> = [
+  { value: "ALL", label: "Todo período" },
+  { value: "7", label: "Últimos 7 dias" },
+  { value: "30", label: "Últimos 30 dias" },
+  { value: "90", label: "Últimos 90 dias" },
+];
+
 export function KanbanBoard({
   token,
   activeView,
@@ -1007,6 +1016,28 @@ function KanbanAnalytics({
   tasks: Task[];
   users: User[];
 }) {
+  const [period, setPeriod] = useState<AnalyticsPeriod>("ALL");
+
+  const periodStart = useMemo(() => {
+    if (period === "ALL") {
+      return null;
+    }
+
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - Number(period) + 1);
+
+    return start;
+  }, [period]);
+
+  const filteredTasks = useMemo(
+    () =>
+      periodStart
+        ? tasks.filter((task) => new Date(task.createdAt) >= periodStart)
+        : tasks,
+    [periodStart, tasks]
+  );
+
   const analytics = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1014,12 +1045,12 @@ function KanbanAnalytics({
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
 
-    const total = tasks.length;
-    const completed = tasks.filter((task) => task.status === "DONE").length;
-    const inProgress = tasks.filter(
+    const total = filteredTasks.length;
+    const completed = filteredTasks.filter((task) => task.status === "DONE").length;
+    const inProgress = filteredTasks.filter(
       (task) => task.status === "IN_PROGRESS" || task.status === "REVIEW"
     ).length;
-    const overdue = tasks.filter((task) => {
+    const overdue = filteredTasks.filter((task) => {
       if (!task.dueDate || task.status === "DONE") {
         return false;
       }
@@ -1029,7 +1060,7 @@ function KanbanAnalytics({
 
       return dueDate < today;
     }).length;
-    const dueSoon = tasks.filter((task) => {
+    const dueSoon = filteredTasks.filter((task) => {
       if (!task.dueDate || task.status === "DONE") {
         return false;
       }
@@ -1043,23 +1074,23 @@ function KanbanAnalytics({
 
     const statusRows = columns.map((column) => ({
       label: column.label,
-      value: tasks.filter((task) => task.status === column.status).length,
+      value: filteredTasks.filter((task) => task.status === column.status).length,
     }));
 
     const priorityRows = priorities.map((priority) => ({
       label: priorityLabels[priority],
-      value: tasks.filter((task) => task.priority === priority).length,
+      value: filteredTasks.filter((task) => task.priority === priority).length,
     }));
 
     const responsibleRows = users
       .map((user) => ({
         label: user.name,
-        value: tasks.filter((task) => task.responsible?.id === user.id).length,
+        value: filteredTasks.filter((task) => task.responsible?.id === user.id).length,
       }))
       .filter((row) => row.value > 0)
       .sort((first, second) => second.value - first.value);
 
-    const unassignedCount = tasks.filter((task) => !task.responsible).length;
+    const unassignedCount = filteredTasks.filter((task) => !task.responsible).length;
 
     if (unassignedCount) {
       responsibleRows.push({
@@ -1067,6 +1098,34 @@ function KanbanAnalytics({
         value: unassignedCount,
       });
     }
+
+    const flowDays = period === "ALL" ? 14 : Number(period);
+    const flowStart = new Date(today);
+    flowStart.setDate(today.getDate() - flowDays + 1);
+
+    const completionFlow = Array.from({ length: flowDays }, (_, index) => {
+      const day = new Date(flowStart);
+      day.setDate(flowStart.getDate() + index);
+
+      const nextDay = new Date(day);
+      nextDay.setDate(day.getDate() + 1);
+
+      return {
+        label: new Intl.DateTimeFormat("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+        }).format(day),
+        value: filteredTasks.filter((task) => {
+          if (task.status !== "DONE") {
+            return false;
+          }
+
+          const completedAt = new Date(task.updatedAt);
+
+          return completedAt >= day && completedAt < nextDay;
+        }).length,
+      };
+    });
 
     return {
       total,
@@ -1078,8 +1137,9 @@ function KanbanAnalytics({
       statusRows,
       priorityRows,
       responsibleRows,
+      completionFlow,
     };
-  }, [tasks, users]);
+  }, [filteredTasks, period, users]);
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-5">
@@ -1092,9 +1152,24 @@ function KanbanAnalytics({
             Acompanhe distribuição, prazos e progresso das tarefas do quadro.
           </p>
         </div>
-        <Badge variant="secondary">
-          {analytics.total} tarefas · {analytics.completionRate}% concluídas
-        </Badge>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <select
+            className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-zinc-500"
+            value={period}
+            onChange={(event) =>
+              setPeriod(event.target.value as AnalyticsPeriod)
+            }
+          >
+            {analyticsPeriods.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <Badge variant="secondary">
+            {analytics.total} tarefas · {analytics.completionRate}% concluídas
+          </Badge>
+        </div>
       </div>
 
       {isLoading ? (
@@ -1145,6 +1220,8 @@ function KanbanAnalytics({
               rows={analytics.responsibleRows}
             />
           </div>
+
+          <AnalyticsFlow rows={analytics.completionFlow} />
         </div>
       )}
     </section>
@@ -1222,6 +1299,57 @@ function AnalyticsDistribution({
       ) : (
         <p className="text-sm leading-6 text-zinc-500">{emptyLabel}</p>
       )}
+    </div>
+  );
+}
+
+function AnalyticsFlow({
+  rows,
+}: {
+  rows: Array<{ label: string; value: number }>;
+}) {
+  const maxValue = Math.max(...rows.map((row) => row.value), 1);
+  const visibleRows = rows.filter((_, index) => {
+    if (rows.length <= 14) {
+      return true;
+    }
+
+    return index % Math.ceil(rows.length / 14) === 0 || index === rows.length - 1;
+  });
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold">Fluxo de conclusão</p>
+        <CheckCircle2 className="size-4 text-zinc-400" />
+      </div>
+
+      <div className="flex h-48 items-end gap-2 overflow-x-auto pb-1">
+        {visibleRows.map((row) => {
+          const height = row.value ? Math.max((row.value / maxValue) * 100, 8) : 4;
+
+          return (
+            <div
+              key={row.label}
+              className="flex h-full min-w-10 flex-1 flex-col justify-end gap-2"
+            >
+              <div className="flex flex-1 items-end rounded-md bg-zinc-50 px-1">
+                <div
+                  className="w-full rounded-t-md bg-zinc-900"
+                  style={{ height: `${height}%` }}
+                  title={`${row.value} concluídas em ${row.label}`}
+                />
+              </div>
+              <div className="grid gap-0.5 text-center">
+                <span className="text-xs font-medium text-zinc-700">
+                  {row.value}
+                </span>
+                <span className="text-[11px] text-zinc-500">{row.label}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

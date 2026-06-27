@@ -8,6 +8,7 @@ import { User } from 'src/users/entities/users.entity';
 import { Tag } from 'src/tags/entities/tags.entity';
 import { TaskHistory } from 'src/task-history/entities/task-history.entity';
 import { MailQueueService } from 'src/mail/mail-queue.service';
+import { TaskStatus } from 'src/enums/task-status.enum';
 
 @Injectable()
 export class TasksService {
@@ -44,6 +45,8 @@ export class TasksService {
       responsibleName: responsible.name,
       responsibleEmail: responsible.email,
     });
+
+    await this.enqueueDueSoonEmailIfNeeded(savedTask);
 
     return savedTask;
   }
@@ -144,6 +147,10 @@ export class TasksService {
       });
     }
 
+    if (dto.dueDate !== undefined) {
+      await this.enqueueDueSoonEmailIfNeeded(savedTask);
+    }
+
     return savedTask;
   }
 
@@ -183,5 +190,32 @@ export class TasksService {
     }
 
     return tags;
+  }
+
+  private async enqueueDueSoonEmailIfNeeded(task: Task) {
+    if (!task.dueDate || task.status === TaskStatus.DONE) {
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dueDate = new Date(task.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+
+    if (dueDate < today || dueDate > nextWeek) {
+      return;
+    }
+
+    await this.mailQueueService.enqueueTaskDueSoonEmail({
+      taskId: task.id,
+      taskTitle: task.title,
+      responsibleName: task.responsible.name,
+      responsibleEmail: task.responsible.email,
+      dueDate: task.dueDate.toISOString(),
+    });
   }
 }

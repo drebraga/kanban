@@ -32,8 +32,9 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 - Cards com tamanho fixo.
 - Dashboard analítico separado do quadro.
 - Métricas por status, prioridade, responsável, tarefas atrasadas e próximas do prazo.
-- Fila assíncrona para e-mails.
-- Envio real de e-mail via SMTP na criação e alteração de status de tarefas.
+- Filtro por período e fluxo de conclusão ao longo do tempo.
+- Fila assíncrona para e-mails com worker separado.
+- Envio real de e-mail via SMTP na criação, alteração de status e prazo próximo.
 
 ## Como Rodar Com Docker
 
@@ -83,6 +84,7 @@ REDIS_PORT=6379
 
 JWT_SECRET=change-me-in-production
 NEXT_PUBLIC_API_URL=http://localhost:4000
+MAIL_WORKER_ENABLED=true
 
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
@@ -98,6 +100,7 @@ Observações:
 - Para Gmail, use senha de app em `SMTP_PASS`, não a senha normal da conta.
 - `SMTP_FROM_NAME` controla o nome exibido do remetente.
 - `SMTP_FROM_ADDRESS` deve ser um endereço autorizado pelo provedor SMTP.
+- `MAIL_WORKER_ENABLED=false` é usado no container web para deixar o processamento da fila apenas no `mail-worker`.
 
 ## Scripts
 
@@ -222,7 +225,8 @@ Criar tag:
 - `TasksModule`: CRUD de tarefas, relacionamento com responsável/tags e histórico.
 - `TagsModule`: CRUD básico de etiquetas.
 - `TaskHistoryModule`: entidade de histórico de status.
-- `MailModule`: fila BullMQ + worker de envio de e-mails via SMTP.
+- `MailModule`: fila BullMQ e envio de e-mails via SMTP.
+- `worker.ts`: processo dedicado para consumir a fila de e-mails.
 
 ### Frontend
 
@@ -235,12 +239,12 @@ Criar tag:
 
 - **JWT:** usado para proteger rotas privadas de tarefas, tags e usuários.
 - **TypeORM com `synchronize`:** mantido para facilitar execução local do case.
-- **Docker Compose:** concentra Postgres, Redis, backend e frontend.
+- **Docker Compose:** concentra Postgres, Redis, backend, worker de e-mail e frontend.
 - **Volumes de `node_modules`:** evitam sobrescrever dependências instaladas dentro dos containers.
-- **BullMQ/Redis:** e-mails rodam fora do fluxo principal da requisição.
+- **BullMQ/Redis:** e-mails rodam fora do fluxo principal da requisição e são processados pelo `mail-worker`.
 - **Nodemailer:** permite envio SMTP real sem depender de serviço proprietário.
 - **Drag and drop:** feito com `dnd-kit`, mantendo mudança de status apenas por arrastar.
-- **Dashboard no frontend:** métricas derivadas dos dados já carregados do quadro, evitando endpoint extra desnecessário para o escopo atual.
+- **Dashboard no frontend:** métricas derivadas dos dados já carregados do quadro, com filtro de período e fluxo de conclusão sem endpoint extra para o escopo atual.
 - **Histórico:** registrado somente quando há mudança real de status.
 
 ## Testes e Build
@@ -273,6 +277,7 @@ Serviços:
 - `postgres`: banco PostgreSQL 16.
 - `redis`: broker para BullMQ.
 - `backend`: NestJS em modo watch.
+- `mail-worker`: consumidor BullMQ para envio assíncrono de e-mails.
 - `frontend`: Next.js em modo dev com webpack.
 
 Volumes:
@@ -301,4 +306,3 @@ docker compose restart frontend
 
 - Usar senha de app para SMTP.
 - Não expor credenciais de e-mail no repositório.
-

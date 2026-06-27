@@ -12,4 +12,11 @@ export type TaskStatusChangedMailJob = TaskCreatedMailJob & {
   newStatus: TaskStatus;
 };
 
-export type TaskMailJob = TaskCreatedMailJob | TaskStatusChangedMailJob;
+export type TaskDueSoonMailJob = TaskCreatedMailJob & {
+  dueDate: string;
+};
+
+export type TaskMailJob =
+  | TaskCreatedMailJob
+  | TaskStatusChangedMailJob
+  | TaskDueSoonMailJob;

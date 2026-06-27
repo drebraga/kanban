@@ -42,6 +42,29 @@ services:
     env_file:
       - .env
 
+    environment:
+      MAIL_WORKER_ENABLED: "false"
+
+  mail-worker:
+    build: ./backend
+    container_name: taskflow-mail-worker
+    user: node
+    command: npm run start:worker
+
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+
+    depends_on:
+      - postgres
+      - redis
+
+    env_file:
+      - .env
+
+    environment:
+      MAIL_WORKER_ENABLED: "true"
+
   frontend:
     build: ./frontend
     container_name: taskflow-frontend
