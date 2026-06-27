@@ -536,68 +536,6 @@ npm run lint
 | GET | `/tags` | Sim | Lista tags |
 | DELETE | `/tags/:id` | Sim | Exclui tag |
 
-## Payloads Principais
-
-Criar tarefa:
-
-```json
-{
-  "title": "Implementar dashboard",
-  "description": "Criar visão analítica do quadro",
-  "priority": "MEDIUM",
-  "dueDate": "2026-06-30",
-  "responsibleId": 1,
-  "tagIds": [1, 2]
-}
-```
-
-Atualizar tarefa:
-
-```json
-{
-  "title": "Implementar dashboard",
-  "description": "Ajustar métricas",
-  "status": "IN_PROGRESS",
-  "priority": "HIGH",
-  "dueDate": "2026-06-30",
-  "responsibleId": 1,
-  "tagIds": [1]
-}
-```
-
-Criar tag:
-
-```json
-{
-  "name": "Frontend"
-}
-```
-
-### Upload de Anexos
-
-Para criar ou editar tarefa com anexos, envie a requisição como `multipart/form-data`.
-
-Campos:
-
-```text
-title=Implementar dashboard
-description=Criar visão analítica do quadro
-priority=MEDIUM
-dueDate=2026-06-30
-responsibleId=1
-tagIds=[1,2]
-attachments=<arquivo>
-attachments=<arquivo>
-```
-
-Regras:
-
-- `attachments` é opcional.
-- Máximo de 5 arquivos por envio.
-- Tamanho máximo de 5 MB por arquivo.
-- Arquivos ficam em `backend/uploads/tasks`.
-- Metadados dos anexos ficam salvos na própria tarefa.
-
 ## Arquitetura
 
 ```text
@@ -684,32 +622,3 @@ Com Docker:
 ```bash
 docker compose up --build
 ```
-
-## Observações de Docker
-
-Serviços:
-
-- `postgres`: banco PostgreSQL 16.
-- `redis`: broker para BullMQ.
-- `backend`: NestJS em modo watch.
-- `mail-worker`: consumidor BullMQ para envio assíncrono de e-mails.
-- `frontend`: Next.js em modo dev com webpack.
-
-Uploads:
-
-- Arquivos enviados em tarefas ficam em `backend/uploads/tasks`.
-- Os metadados dos anexos ficam salvos na própria tarefa.
-- A pasta `backend/uploads/` é ignorada pelo Git.
-
-Volumes:
-
-- `postgres_data`: persistência do banco.
-- `backend_node_modules`: dependências do backend dentro do container.
-- `frontend_node_modules`: dependências do frontend dentro do container.
-
-## Segurança
-
-- Usar senha de app para SMTP.
-- Não expor credenciais de e-mail no repositório.
-- Não usar `JWT_SECRET` padrão em ambiente real.
-- Proteger download de anexos em produção.
