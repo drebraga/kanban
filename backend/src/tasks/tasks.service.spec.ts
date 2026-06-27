@@ -186,4 +186,41 @@ describe('TasksService', () => {
     );
     expect(mailQueueService.cancelTaskDueSoonEmail).toHaveBeenCalledWith(1);
   });
+
+  it('should enqueue assignment email when responsible changes', async () => {
+    const previousResponsible = {
+      id: 1,
+      name: 'Andre',
+      email: 'andre@example.com',
+    };
+    const nextResponsible = {
+      id: 2,
+      name: 'Maria',
+      email: 'maria@example.com',
+    };
+    const task = {
+      id: 1,
+      title: 'Implementar Kanban',
+      status: TaskStatus.TODO,
+      responsible: previousResponsible,
+    };
+
+    tasksRepository.findOne.mockResolvedValue(task);
+    usersRepository.findOne.mockResolvedValue(nextResponsible);
+    tasksRepository.save.mockResolvedValue({
+      ...task,
+      responsible: nextResponsible,
+    });
+
+    await service.update(1, {
+      responsibleId: 2,
+    });
+
+    expect(mailQueueService.enqueueTaskCreatedEmail).toHaveBeenCalledWith({
+      taskId: 1,
+      taskTitle: 'Implementar Kanban',
+      responsibleName: 'Maria',
+      responsibleEmail: 'maria@example.com',
+    });
+  });
 });

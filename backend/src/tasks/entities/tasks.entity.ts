@@ -1,6 +1,7 @@
 import { TaskPriority } from 'src/enums/task-priority.enum';
 import { TaskStatus } from 'src/enums/task-status.enum';
 import { Tag } from 'src/tags/entities/tags.entity';
+import { TaskAttachment } from '../types/task-attachment.type';
 import { User } from 'src/users/entities/users.entity';
 import {
   Column,
@@ -51,6 +52,12 @@ export class Task {
   @ManyToMany(() => Tag)
   @JoinTable()
   tags!: Tag[];
+
+  @Column({
+    type: 'jsonb',
+    default: [],
+  })
+  attachments!: TaskAttachment[];
 
   @CreateDateColumn()
   createdAt!: Date;

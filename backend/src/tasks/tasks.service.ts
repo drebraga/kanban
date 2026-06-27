@@ -97,6 +97,7 @@ export class TasksService {
   async update(id: number, dto: UpdateTaskDto) {
     const task = await this.findOne(id);
     const previousStatus = task.status;
+    const previousResponsibleId = task.responsible?.id;
 
     if (dto.responsibleId !== undefined) {
       task.responsible = await this.findResponsible(dto.responsibleId);
@@ -144,6 +145,18 @@ export class TasksService {
         responsibleEmail: savedTask.responsible.email,
         oldStatus: previousStatus,
         newStatus: dto.status,
+      });
+    }
+
+    if (
+      dto.responsibleId !== undefined &&
+      savedTask.responsible.id !== previousResponsibleId
+    ) {
+      await this.mailQueueService.enqueueTaskCreatedEmail({
+        taskId: savedTask.id,
+        taskTitle: savedTask.title,
+        responsibleName: savedTask.responsible.name,
+        responsibleEmail: savedTask.responsible.email,
       });
     }
 
