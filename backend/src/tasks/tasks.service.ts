@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Task } from './entities/tasks.entity';
 import { In, Repository } from 'typeorm';
+import { join } from 'path';
+import { unlink } from 'fs/promises';
 import { CreateTaskDto } from './dto/tasks.dto';
 import { UpdateTaskDto } from './dto/tasks-update.dto';
 import { User } from 'src/users/entities/users.entity';
@@ -27,31 +29,36 @@ export class TasksService {
   ) {}
 
   async create(dto: CreateTaskDto, files: UploadedTaskFile[] = []) {
-    const responsible = await this.findResponsible(dto.responsibleId);
-    const tags = await this.findTags(dto.tagIds);
+    try {
+      const responsible = await this.findResponsible(dto.responsibleId);
+      const tags = await this.findTags(dto.tagIds);
 
-    const task = this.tasksRepository.create({
-      title: dto.title,
-      description: dto.description,
-      priority: dto.priority,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      responsible,
-      tags,
-      attachments: this.mapAttachments(files),
-    });
+      const task = this.tasksRepository.create({
+        title: dto.title,
+        description: dto.description,
+        priority: dto.priority,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        responsible,
+        tags,
+        attachments: this.mapAttachments(files),
+      });
 
-    const savedTask = await this.tasksRepository.save(task);
+      const savedTask = await this.tasksRepository.save(task);
 
-    await this.mailQueueService.enqueueTaskCreatedEmail({
-      taskId: savedTask.id,
-      taskTitle: savedTask.title,
-      responsibleName: responsible.name,
-      responsibleEmail: responsible.email,
-    });
+      await this.mailQueueService.enqueueTaskCreatedEmail({
+        taskId: savedTask.id,
+        taskTitle: savedTask.title,
+        responsibleName: responsible.name,
+        responsibleEmail: responsible.email,
+      });
 
-    await this.scheduleDueSoonEmail(savedTask);
+      await this.scheduleDueSoonEmail(savedTask);
 
-    return savedTask;
+      return savedTask;
+    } catch (error) {
+      await this.deleteUploadedFiles(files);
+      throw error;
+    }
   }
 
   findAll() {
@@ -98,93 +105,99 @@ export class TasksService {
   }
 
   async update(id: number, dto: UpdateTaskDto, files: UploadedTaskFile[] = []) {
-    const task = await this.findOne(id);
-    const previousStatus = task.status;
-    const previousResponsibleId = task.responsible?.id;
+    try {
+      const task = await this.findOne(id);
+      const previousStatus = task.status;
+      const previousResponsibleId = task.responsible?.id;
 
-    if (dto.responsibleId !== undefined) {
-      task.responsible = await this.findResponsible(dto.responsibleId);
-    }
+      if (dto.responsibleId !== undefined) {
+        task.responsible = await this.findResponsible(dto.responsibleId);
+      }
 
-    if (dto.tagIds !== undefined) {
-      task.tags = await this.findTags(dto.tagIds);
-    }
+      if (dto.tagIds !== undefined) {
+        task.tags = await this.findTags(dto.tagIds);
+      }
 
-    if (dto.title !== undefined) {
-      task.title = dto.title;
-    }
+      if (dto.title !== undefined) {
+        task.title = dto.title;
+      }
 
-    if (dto.description !== undefined) {
-      task.description = dto.description;
-    }
+      if (dto.description !== undefined) {
+        task.description = dto.description;
+      }
 
-    if (dto.priority !== undefined) {
-      task.priority = dto.priority;
-    }
+      if (dto.priority !== undefined) {
+        task.priority = dto.priority;
+      }
 
-    if (dto.status !== undefined) {
-      task.status = dto.status;
-    }
+      if (dto.status !== undefined) {
+        task.status = dto.status;
+      }
 
-    if (dto.dueDate !== undefined) {
-      task.dueDate = new Date(dto.dueDate);
-    }
+      if (dto.dueDate !== undefined) {
+        task.dueDate = new Date(dto.dueDate);
+      }
 
-    if (files.length) {
-      task.attachments = [
-        ...(task.attachments ?? []),
-        ...this.mapAttachments(files),
-      ];
-    }
+      if (files.length) {
+        task.attachments = [
+          ...(task.attachments ?? []),
+          ...this.mapAttachments(files),
+        ];
+      }
 
-    const savedTask = await this.tasksRepository.save(task);
+      const savedTask = await this.tasksRepository.save(task);
 
-    if (dto.status !== undefined && dto.status !== previousStatus) {
-      await this.historyRepository.save(
-        this.historyRepository.create({
-          task: savedTask,
+      if (dto.status !== undefined && dto.status !== previousStatus) {
+        await this.historyRepository.save(
+          this.historyRepository.create({
+            task: savedTask,
+            oldStatus: previousStatus,
+            newStatus: dto.status,
+          }),
+        );
+
+        await this.mailQueueService.enqueueTaskStatusChangedEmail({
+          taskId: savedTask.id,
+          taskTitle: savedTask.title,
+          responsibleName: savedTask.responsible.name,
+          responsibleEmail: savedTask.responsible.email,
           oldStatus: previousStatus,
           newStatus: dto.status,
-        }),
-      );
+        });
+      }
 
-      await this.mailQueueService.enqueueTaskStatusChangedEmail({
-        taskId: savedTask.id,
-        taskTitle: savedTask.title,
-        responsibleName: savedTask.responsible.name,
-        responsibleEmail: savedTask.responsible.email,
-        oldStatus: previousStatus,
-        newStatus: dto.status,
-      });
+      if (
+        dto.responsibleId !== undefined &&
+        savedTask.responsible.id !== previousResponsibleId
+      ) {
+        await this.mailQueueService.enqueueTaskCreatedEmail({
+          taskId: savedTask.id,
+          taskTitle: savedTask.title,
+          responsibleName: savedTask.responsible.name,
+          responsibleEmail: savedTask.responsible.email,
+        });
+      }
+
+      if (
+        dto.dueDate !== undefined ||
+        dto.responsibleId !== undefined ||
+        dto.status !== undefined
+      ) {
+        await this.scheduleDueSoonEmail(savedTask);
+      }
+
+      return savedTask;
+    } catch (error) {
+      await this.deleteUploadedFiles(files);
+      throw error;
     }
-
-    if (
-      dto.responsibleId !== undefined &&
-      savedTask.responsible.id !== previousResponsibleId
-    ) {
-      await this.mailQueueService.enqueueTaskCreatedEmail({
-        taskId: savedTask.id,
-        taskTitle: savedTask.title,
-        responsibleName: savedTask.responsible.name,
-        responsibleEmail: savedTask.responsible.email,
-      });
-    }
-
-    if (
-      dto.dueDate !== undefined ||
-      dto.responsibleId !== undefined ||
-      dto.status !== undefined
-    ) {
-      await this.scheduleDueSoonEmail(savedTask);
-    }
-
-    return savedTask;
   }
 
   async remove(id: number) {
     const task = await this.findOne(id);
     await this.mailQueueService.cancelTaskDueSoonEmail(task.id);
     await this.tasksRepository.remove(task);
+    await this.deleteExistingAttachments(task.attachments ?? []);
 
     return {
       id,
@@ -228,6 +241,22 @@ export class TasksService {
       size: file.size,
       url: `/uploads/tasks/${file.filename}`,
     }));
+  }
+
+  private async deleteUploadedFiles(files: UploadedTaskFile[]) {
+    await Promise.all(
+      files.map((file) => unlink(file.path).catch(() => undefined)),
+    );
+  }
+
+  private async deleteExistingAttachments(attachments: TaskAttachment[]) {
+    await Promise.all(
+      attachments.map((attachment) =>
+        unlink(
+          join(process.cwd(), 'uploads', 'tasks', attachment.fileName),
+        ).catch(() => undefined),
+      ),
+    );
   }
 
   private async scheduleDueSoonEmail(task: Task) {

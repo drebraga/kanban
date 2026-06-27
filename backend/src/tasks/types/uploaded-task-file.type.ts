@@ -3,4 +3,5 @@ export type UploadedTaskFile = {
   filename: string;
   mimetype: string;
   size: number;
+  path: string;
 };
