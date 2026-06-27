@@ -17,12 +17,12 @@ export async function apiRequest<T>(
   path: string,
   { token, headers, ...options }: RequestOptions = {}
 ): Promise<T> {
-  const isFormData = options.body instanceof FormData;
+  const isJsonBody = typeof options.body === "string";
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(isJsonBody ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },

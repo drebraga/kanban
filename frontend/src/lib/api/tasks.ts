@@ -69,6 +69,10 @@ function buildTaskFormData(payload: CreateTaskPayload | UpdateTaskPayload) {
       return;
     }
 
+    if (Array.isArray(value) && value.length === 0) {
+      return;
+    }
+
     formData.append(
       key,
       Array.isArray(value) ? JSON.stringify(value) : String(value)

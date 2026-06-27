@@ -63,7 +63,6 @@ export class UpdateTaskDto {
     return parseNumberArray(value as unknown);
   })
   @IsArray()
-  @Type(() => Number)
   @IsInt({ each: true })
   tagIds?: number[];
 }
