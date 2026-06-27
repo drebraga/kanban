@@ -39,19 +39,83 @@ Aplicação fullstack para gestão de tarefas em quadro Kanban, com autenticaç�
 
 ## Como Rodar Com Docker
 
+Este é o caminho recomendado para executar o projeto.
+
+Com Docker, o ambiente fica mais previsível porque o projeto já sobe com as versões esperadas de Node.js, PostgreSQL e Redis. Isso reduz problemas comuns de compatibilidade, como versão local do Node diferente da exigida pelo Next.js, PostgreSQL não instalado, Redis desligado ou variáveis apontando para hosts incorretos.
+
+### 1. Pré-requisitos
+
+Instale:
+
+- Docker
+- Docker Compose
+
+Confirme se estão disponíveis:
+
+```bash
+docker --version
+docker compose version
+```
+
+### 2. Criar o arquivo de ambiente
+
 Crie o arquivo `.env` a partir do exemplo:
 
 ```bash
 cp .env.example .env
 ```
 
-Preencha as variáveis, especialmente as de SMTP se quiser testar envio real de e-mail.
+Para rodar via Docker, mantenha os hosts internos dos serviços:
 
-Suba os serviços:
+```env
+PORT=4000
+FRONTEND_URL=http://localhost:3000
+
+DB_HOST=postgres
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=taskflow
+
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+JWT_SECRET=change-me-in-production
+NEXT_PUBLIC_API_URL=http://localhost:4000
+MAIL_WORKER_ENABLED=true
+
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM_NAME=TaskFlow
+SMTP_FROM_ADDRESS=no-reply@example.com
+```
+
+Preencha as variáveis SMTP se quiser testar envio real de e-mail. Para Gmail, use senha de app em `SMTP_PASS`.
+
+### 3. Subir todos os serviços
+
+Na raiz do projeto, execute:
 
 ```bash
 docker compose up --build
 ```
+
+Esse comando:
+
+- constrói as imagens do backend e frontend;
+- instala as dependências dentro dos containers;
+- sobe PostgreSQL;
+- sobe Redis;
+- sobe o backend NestJS;
+- sobe o worker de e-mail;
+- sobe o frontend Next.js.
+
+Na primeira execução pode demorar mais por causa da instalação das dependências.
+
+### 4. Acessar a aplicação
 
 Acesse:
 
@@ -60,10 +124,99 @@ Acesse:
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
-Para reiniciar apenas o backend depois de alterar variáveis de ambiente:
+### 5. Opcional: Conferir se os containers estão rodando
+
+```bash
+docker compose ps
+```
+
+Serviços esperados:
+
+- `taskflow-frontend`
+- `taskflow-backend`
+- `taskflow-mail-worker`
+- `taskflow-postgres`
+- `taskflow-redis`
+
+### 6. Opcional: Ver logs
+
+```bash
+docker compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f mail-worker
+```
+
+### 7. Opcional: reiniciar serviços após mudar variáveis
+
+Este passo só é necessário se você alterar alguma variável no `.env` depois que os containers já estiverem rodando.
+
+Se você configurou o `.env` antes de executar `docker compose up --build`, pode pular esta etapa.
+
+Quando alterar variáveis de ambiente com os containers em execução, reinicie apenas o serviço afetado:
 
 ```bash
 docker compose restart backend
+docker compose restart frontend
+docker compose restart mail-worker
+```
+
+Se não souber qual serviço foi afetado, reinicie todos:
+
+```bash
+docker compose restart
+```
+
+### 8. Parar os containers
+
+```bash
+docker compose down
+```
+
+Para apagar também os dados persistidos do banco, use:
+
+```bash
+docker compose down -v
+```
+
+Use `-v` apenas quando quiser resetar o banco local.
+
+### 9. Validar o fluxo principal
+
+Com os serviços no ar:
+
+1. Acesse http://localhost:3000.
+2. Crie uma conta.
+3. Faça login.
+4. Crie tags, se quiser.
+5. Crie uma tarefa com título, descrição, responsável, prioridade, data de entrega e, opcionalmente, anexos.
+6. Arraste o card entre colunas.
+7. Edite o card e confira histórico/anexos.
+8. Acesse a tela de dados analíticos.
+
+### 10. Problemas comuns
+
+Se uma dependência nova não aparecer dentro do container, atualize o volume de `node_modules`:
+
+```bash
+docker compose exec -u root backend npm ci
+docker compose exec -u root backend chown -R node:node /app/node_modules
+docker compose restart backend
+```
+
+Para frontend:
+
+```bash
+docker compose exec -u root frontend npm ci
+docker compose exec -u root frontend chown -R node:node /app/node_modules
+docker compose restart frontend
+```
+
+Se houver conflito de porta, confira se já existe algo usando `3000`, `4000`, `5432` ou `6379`.
+
+Se quiser acompanhar todos os logs juntos:
+
+```bash
+docker compose logs -f
 ```
 
 ## Como Rodar Localmente Sem Docker
